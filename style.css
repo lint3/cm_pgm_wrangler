@@ -1,0 +1,673 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* Form elements don't inherit font from body by default */
+input, textarea, button, select { font-family: inherit; }
+
+button {
+  border: 1px solid #444;
+  background: hsla(0, 0, 0, 20%);
+  padding: 1px 6px;
+}
+
+select {
+  border: 1px solid #bbb;
+  background: #fafafa;
+  color: inherit;
+}
+select:hover    { background: #ebebeb; border-color: #888; }
+select:disabled { opacity: 0.4; }
+
+input[type="text"], textarea {
+  font-size: 12px;
+  padding: 1px 4px;
+  background: #fafafa;
+  border: 1px solid #ccc;
+}
+
+input[type="text"]:focus, textarea:focus {
+  outline: none;
+  border: 1px solid #555;
+}
+
+
+
+/*
+  Color palette:
+  #ebebeb   page background
+  #ffffff   panels, config bar
+  #eceef1   output areas (parsed boxes, diff content)
+  #d0d3da   output area borders
+  #ccc      general borders
+*/
+
+body {
+  font-family: monospace;
+  font-size: 13px;
+  padding: 0.5rem 1rem;
+  background: #eee;
+  color: #222;
+}
+
+/* -------------------------------------------------------------------------
+   Header
+------------------------------------------------------------------------- */
+header {
+  position: relative;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+header h1 { font-size: 1.1rem; }
+
+.h1-hover { display: none; }
+header h1:hover .h1-default { display: none; }
+header h1:hover .h1-hover   { display: inline; }
+
+
+/* Absolute so it doesn't shift the centered h1 */
+.btn-help-trigger {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 50%;
+}
+
+/* -------------------------------------------------------------------------
+   Small-caps label — shared by footer counts, diff count, table headers,
+   help section titles, and error trigger
+------------------------------------------------------------------------- */
+.footer-label,
+.header-count,
+.footer-errors,
+.help-section-title,
+#modal-mapping-table th {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #777;
+}
+
+/* -------------------------------------------------------------------------
+   Buttons
+------------------------------------------------------------------------- */
+
+/* Utility buttons: opacity on hover */
+.btn-fade {
+  color: #444;
+  opacity: 0.5;
+}
+.btn-fade:hover { opacity: 1; }
+
+/* Danger modifier: red on hover */
+.btn-danger:hover {
+  color: #c00;
+  border-color: #c00;
+  background: #fff5f5;
+}
+
+/* Panel icon buttons (×, ⌫, ⇄): symbol characters, larger than text buttons */
+.btn-panel-icon {
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+/* Push the ⌫ + ⇄ pair to the right of the type row */
+.btn-clear-input { margin-left: auto; }
+
+
+/* Copy button: text label, compact */
+.btn-copy {
+  font-size: 11px;
+}
+.btn-copy:disabled { cursor: default; }
+
+/* Positioned in the top-right corner of the parsed output wrapper */
+.btn-copy-parsed {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+
+/* Clear all: solid background, hover tint, armed (confirm) state */
+.btn-clear {
+  font-size: 11px;
+  background: #fafafa;
+}
+.btn-clear-armed,
+.btn-clear-armed:hover { opacity: 1; border-color: #c00; color: #fff; background: #c00; }
+
+/* -------------------------------------------------------------------------
+   Output areas: parsed output boxes
+------------------------------------------------------------------------- */
+.output-area {
+  font-size: 12px;
+  background: hsla(228, 10%, 85%, 0.5);
+  border: 1px solid #d0d3da;
+  border-radius: 2px;
+  color: #333;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* -------------------------------------------------------------------------
+   Config bar
+------------------------------------------------------------------------- */
+#config-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 0.4rem 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.config-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  border-left: 1px solid #ddd;
+  padding-left: 1rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  user-select: none;
+}
+.checkbox-label:has(input:disabled) { color: #aaa; }
+
+/* Delimiter input with space-visualising overlay */
+.delimiter-wrapper {
+  position: relative;
+  display: inline-block; /* shrink-wrap around the input */
+}
+#txt-delimiter { padding-left: 1px; }
+
+.delimiter-preview {
+  position: absolute;
+  inset: 1px;           /* sit just inside the input's border */
+  padding: 0px 4px 0px 1px; /* 0 top padding nudges text up to match input's rendering */
+  font-size: 12px;
+  background: #fafafa;
+  pointer-events: none; /* clicks fall through to the input beneath */
+  white-space: pre;     /* preserve spacing layout */
+}
+/* Hide the preview while the input is focused */
+#txt-delimiter:focus + .delimiter-preview { display: none; }
+
+
+/* Load BOM button: solid background, hover darkens border */
+#btn-load-bom {
+  font-size: 11px;
+  background: #fafafa;
+}
+#btn-load-bom:hover {
+  background: #ebebeb;
+  border-color: #888;
+}
+
+/* Drag-over state: pulsing ring to draw attention without overlaying the page */
+#btn-load-bom.drag-active {
+  border-color: #2a8;
+  background: #eaf8f1;
+  color: #1a6;
+  animation: bom-beacon 0.65s ease-out infinite;
+}
+
+@keyframes bom-beacon {
+  0%   { box-shadow: 0 0 0 0px rgba(34, 170, 100, 0.7); }
+  100% { box-shadow: 0 0 0 10px rgba(34, 170, 100, 0); }
+}
+
+/* -------------------------------------------------------------------------
+   Panel area
+------------------------------------------------------------------------- */
+#panel-area {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+#panel-container {
+  display: flex;
+  flex: 1;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+#btn-add-panel {
+  flex-shrink: 0;
+  width: 24px;
+  background: #fff;
+  border: 1px dashed #bbb;
+  border-radius: 3px;
+  color: #aaa;
+  font-size: 18px;
+  padding: 0;
+}
+#btn-add-panel:hover {
+  background: #ebebeb;
+  border-color: #888;
+  color: #444;
+}
+
+.panel {
+  flex: 1;
+  min-width: 240px;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+input.panel-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  padding: 2px;
+  color: inherit;
+  margin-right: 5px;
+}
+input.panel-label:hover { outline: none; border-color: #d0d3da; }
+
+.sub-area {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.raw-input {
+  width: 100%;
+  height: 160px;
+  resize: vertical;
+  padding: 0.35rem;
+  line-height: 1.4;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+
+.parsed-output-wrapper { position: relative; }
+
+.parsed-output {
+  min-height: 60px;
+  padding: 0.35rem;
+  padding-right: 2.5rem; /* room for the copy button */
+}
+
+.panel-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* -------------------------------------------------------------------------
+   Token diff status spans (rendered inside .parsed-output)
+   status-all:     in every panel — no highlight, normal text
+   status-unique:  only in this panel — red tint
+   status-partial: in some but not all panels — amber tint (3+ panel diffs)
+------------------------------------------------------------------------- */
+.token {
+  border-radius: 2px;
+  padding: 0 1px;
+  white-space: nowrap;
+}
+
+.status-unique  { background: #fbb; }
+.status-partial { background: #fef3c7; }
+
+/* Partially-fulfilled output token: present in BOM but not all contributors were in input */
+.partial-token  { border: 2px dotted #0004; }
+
+/* -------------------------------------------------------------------------
+   Per-panel type row: [input type] → [output type]  [⌫] [⇄]
+------------------------------------------------------------------------- */
+.panel-type-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.panel-input-type,
+.panel-output-type {
+  font-size: 11px;
+  padding: 1px 3px;
+}
+
+.type-arrow {
+  color: #888;
+  font-size: 12px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+/* -------------------------------------------------------------------------
+   Error expando (panel footer)
+------------------------------------------------------------------------- */
+
+/* footer-errors uses the shared small-caps style; these are its unique props */
+.footer-errors {
+  margin-right: auto;
+  color: #c00; /* overrides the #777 from the shared rule */
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Hide when empty so the footer layout is unchanged with no errors */
+.footer-errors:empty { display: none; }
+
+.error-detail {
+  font-size: 11px;
+  padding: 0.25rem 0.4rem;
+  background: #fff5f5;
+  border: 1px solid #fbb;
+  border-radius: 2px;
+  word-break: break-word;
+  color: #a00;
+}
+
+/* -------------------------------------------------------------------------
+   Modal (BOM column mapping + help)
+------------------------------------------------------------------------- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+/* [hidden] overrides the display:flex set above */
+.modal-overlay[hidden] { display: none; }
+
+.modal-box {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  min-width: 380px;
+  max-width: 520px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid #ddd;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.btn-modal-icon {
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 4px;
+  border: none;
+  color: #aaa;
+}
+.btn-modal-icon:hover { color: #c00; }
+
+.modal-body {
+  overflow-y: auto;
+  padding: 0.5rem 0.75rem;
+  flex: 1;
+}
+
+.modal-header-row-label {
+  font-size: 11px;
+  font-weight: normal;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #555;
+}
+
+#bom-header-row {
+  font-size: 11px;
+  width: 3.2em;
+  padding: 1px 3px;
+  border: 1px solid #bbb;
+  background: #fafafa;
+  font-family: inherit;
+  text-align: center;
+}
+
+#modal-mapping-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+/* th font/case styles come from the shared small-caps rule above */
+#modal-mapping-table th { text-align: left; padding: 0 0.4rem 0.3rem; }
+
+#modal-mapping-table td {
+  padding: 0.15rem 0.4rem;
+  vertical-align: middle;
+}
+
+.modal-col-header {
+  font-size: 12px;
+  color: #333;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modal-role-select {
+  font-size: 12px;
+  padding: 1px 4px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  border-top: 1px solid #ddd;
+}
+
+.modal-footer button        { font-size: 12px; padding: 2px 10px; background: #fafafa; }
+.modal-footer button:hover  { background: #ebebeb; }
+
+.modal-footer .btn-modal-primary          { background: #2a5; border-color: #1a4; color: #fff; font-weight: 700; }
+.modal-footer .btn-modal-primary:hover    { background: #1a4; }
+
+/* -------------------------------------------------------------------------
+   Help modal content
+------------------------------------------------------------------------- */
+.help-body {
+  min-width: 360px;
+  max-width: 480px;
+}
+
+/* help-section-title font/case styles come from the shared small-caps rule above */
+.help-section-title { margin-bottom: 0.4rem; }
+
+.help-divider {
+  border: none;
+  border-top: 1px solid #ddd;
+  margin: 0.75rem 0;
+}
+
+.help-dl dt,
+.help-dl dd { font-size: 12px; }
+.help-dl dt  { font-weight: 700; margin-top: 0.4rem; }
+.help-dl dd  { color: #444; margin-left: 1rem; line-height: 1.4; }
+
+/* -------------------------------------------------------------------------
+   Panel source type dropdown
+------------------------------------------------------------------------- */
+.panel-source-type {
+  width: 100%;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+
+/* -------------------------------------------------------------------------
+   Drop zone: browse button + drag-and-drop area
+------------------------------------------------------------------------- */
+.drop-zone {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px dashed #ccc;
+  border-radius: 3px;
+  background: #fafafa;
+  min-height: 32px;
+  flex-wrap: wrap;
+}
+
+.drop-zone.drag-over {
+  border-color: #2a8;
+  background: #eaf8f1;
+}
+
+.btn-browse {
+  font-size: 11px;
+  background: #fff;
+  flex-shrink: 0;
+}
+.btn-browse:hover {
+  background: #ebebeb;
+  border-color: #888;
+}
+
+.drop-zone-label {
+  font-size: 11px;
+  color: #aaa;
+  pointer-events: none; /* don't intercept drag events from parent */
+  user-select: none;
+}
+
+.drop-zone-filename {
+  font-size: 11px;
+  color: #555;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* -------------------------------------------------------------------------
+   Text input area (only shown when source type is Textbox)
+------------------------------------------------------------------------- */
+.text-input-area {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.identifier-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.identifier-label {
+  font-size: 11px;
+  color: #777;
+  white-space: nowrap;
+}
+
+.panel-interpret-as {
+  font-size: 11px;
+  padding: 1px 3px;
+}
+
+/* -------------------------------------------------------------------------
+   Panel footer — error trigger | View Full Table | item count
+------------------------------------------------------------------------- */
+.btn-view-table {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #555;
+  margin-left: auto;
+  margin-right: 0.5rem;
+}
+
+/* -------------------------------------------------------------------------
+   Full-table modal
+------------------------------------------------------------------------- */
+.modal-box-full {
+  min-width: min(90vw, 720px);
+  max-width: 95vw;
+  max-height: 85vh;
+}
+
+.table-modal-body {
+  overflow: auto;
+  padding: 0.5rem;
+}
+
+.table-modal-empty {
+  font-size: 12px;
+  color: #aaa;
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+.full-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  width: 100%;
+}
+
+.full-table th,
+.full-table td {
+  border: 1px solid #d0d3da;
+  padding: 0.2rem 0.5rem;
+  white-space: nowrap;
+  vertical-align: top;
+  text-align: left;
+}
+
+.full-table th {
+  background: #eceef1;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: #555;
+  position: sticky;
+  top: 0;
+}
+
+.full-table td {
+  color: #333;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

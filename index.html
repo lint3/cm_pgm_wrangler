@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Partser</title>
+  <link rel="icon" href="favicon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Partser - <span class="h1-default">STOP THE MADNESS</span><span class="h1-hover">reduce THE MADNESS</span></h1>
+    <button id="btn-help" class="btn-help-trigger">?</button>
+  </header>
+
+  <!-- Config bar: spans all columns -->
+  <div id="config-bar">
+
+    <button id="btn-clear" class="btn-fade btn-danger btn-clear">Clear Everything</button>
+
+    <div class="config-group">
+      <label for="sel-comparison-field">Compare by</label>
+      <select id="sel-comparison-field">
+        <option value="refdes">Refdes</option>
+        <option value="fn">FN</option>
+        <option value="ipn">IPN</option>
+        <option value="mpn">MPN</option>
+        <option value="cpn">CPN</option>
+      </select>
+    </div>
+
+
+
+  </div>
+
+  <!-- Panel columns + add-panel button -->
+  <div id="panel-area">
+    <div id="panel-container">
+      <!-- Panels rendered by app.js -->
+    </div>
+    <button id="btn-add-panel">+</button>
+  </div>
+
+  <!-- Column-mapping modal — shown after a BOM file is selected -->
+  <div id="bom-modal" class="modal-overlay" hidden>
+    <div class="modal-box">
+      <div class="modal-header">
+        <span>Map BOM Columns</span>
+        <label class="modal-header-row-label">
+          Header row:
+          <input type="number" id="bom-header-row" value="1" min="1" max="999" title="Row number containing column headers">
+        </label>
+        <button id="btn-modal-close" class="btn-modal-icon">×</button>
+      </div>
+      <div class="modal-body">
+        <table id="modal-mapping-table">
+          <thead>
+            <tr>
+              <th>Column header</th>
+              <th>Role</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Rows injected by app.js showMappingModal() -->
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-modal-cancel">Cancel</button>
+        <button id="btn-modal-confirm" class="btn-modal-primary">Import</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full-table modal — shown when "View Full Table" is clicked on a panel -->
+  <div id="table-modal" class="modal-overlay" hidden>
+    <div class="modal-box modal-box-full">
+      <div class="modal-header">
+        <span id="table-modal-title">Full Table</span>
+        <button id="btn-table-modal-close" class="btn-modal-icon">×</button>
+      </div>
+      <div class="modal-body table-modal-body" id="table-modal-body">
+        <p class="table-modal-empty">(no data loaded)</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help modal -->
+  <div id="help-modal" class="modal-overlay" hidden>
+    <div class="modal-box">
+      <div class="modal-header">
+        <span>Help</span>
+        <button id="btn-help-close" class="btn-modal-icon">×</button>
+      </div>
+      <div class="modal-body help-body">
+        <p class="help-section-title">Features</p>
+        <dl class="help-dl">
+          <dt>Ranges</dt>
+          <dd>Input ranges like R1-R8 are expanded automatically. Enable the Range toggle to collapse output back to range notation.</dd>
+
+          <dt>Partial matches</dt>
+          <dd>An item in the output area may not be fully represented in the input area (e.g. a refdes is in input but has siblings of the same IPN that were not mentioned). Enable Partial to flag these.</dd>
+
+          <dt>Output delimiter</dt>
+          <dd>Customize the separator between output items (use \n for line break, \t for tab).</dd>
+
+          <dt>Diff highlighting</dt>
+          <dd>Colors tints items by how many panels contain them (red = unique, yellow = partial match). DiffOnly hides items present in all panels.</dd>
+
+          <dt>BOM import</dt>
+          <dd>Load an .xlsx file and map its columns; converting between data types is enabled once a BOM is loaded.</dd>
+        </dl>
+        <hr class="help-divider">
+        <p class="help-section-title">Use Cases</p>
+        <dl class="help-dl">
+          <dt>Deduplicate / normalize a list</dt>
+          <dd>Paste a messy list → get sorted, deduped output.</dd>
+
+          <dt>Convert an IPN list to find numbers</dt>
+          <dd>Import BOM → paste IPN list → set IPN input → FN output.</dd>
+
+          <dt>Compare refdes list to find number list</dt>
+          <dd>E.g. X-Ray requirements (assembly drawing) vs. X-Ray program: Import BOM → paste refdes in one panel + FN list in another → set input/output types → compare.</dd>
+
+          <dt>Compare machine programs to work instructions</dt>
+          <dd>Paste each list in its own panel → set types → diff highlights mismatches.</dd>
+        </dl>
+
+        
+      </div>
+    </div>
+  </div>
+
+  <script src="lib/xlsx.full.min.js"></script>
+  <script src="parser.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
