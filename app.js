@@ -318,7 +318,8 @@ const ROLE_OPTIONS = [
 
 // Stored while the modal is open; cleared on cancel or confirm.
 // All raw rows from the file (not pre-split); header row is chosen by the user.
-let _pendingAllRows = null;
+let _pendingAllRows  = null;
+let _pendingPanelId  = null;
 
 // --------------------------------------------------------------------------
 // handleBomFile(file, panelId)
@@ -327,7 +328,16 @@ let _pendingAllRows = null;
 //   instead of global bom; will eventually dispatch to CSV/XML parsers too.
 // --------------------------------------------------------------------------
 function handleBomFile(file, panelId) {
-  // TODO: rewrite for new app
+  const reader = new FileReader();
+  reader.onload = e => {
+    const workbook = XLSX.read(e.target.result, { type: 'array' });
+    const sheet    = workbook.Sheets[workbook.SheetNames[0]];
+    // header:1 gives array-of-arrays; defval:'' keeps empty cells in place
+    const allRows  = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    _pendingPanelId = panelId;
+    showMappingModal(allRows);
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 // TODO: rewrite for new app — file import moves to per-panel (triggered by buttons
@@ -393,6 +403,7 @@ function repopulateMappingTable(headerRowIdx) {
 function closeMappingModal() {
   document.getElementById('bom-modal').setAttribute('hidden', '');
   _pendingAllRows = null;
+  _pendingPanelId = null;
 }
 
 // --------------------------------------------------------------------------
@@ -403,8 +414,25 @@ function closeMappingModal() {
 //   instead of global bom; update panel source badge; call runComparison().
 // --------------------------------------------------------------------------
 function confirmMapping() {
-  // TODO: rewrite for new app
+  // Build colIndex → role mapping from the dropdown selections
+  const mapping = {};
+  document.querySelectorAll('.modal-role-select').forEach(sel => {
+    mapping[parseInt(sel.dataset.col, 10)] = sel.value;
+  });
+
+  // Data rows are everything after the selected header row
+  const headerRowIdx = Math.max(0, parseInt(document.getElementById('bom-header-row').value, 10) - 1);
+  const dataRows     = _pendingAllRows.slice(headerRowIdx + 1);
+
+  // Build typed BOM rows and store on the target panel
+  const panel = panels.find(p => p.id === _pendingPanelId);
+  if (panel) {
+    panel.bomRows    = buildBomRows(dataRows, mapping);
+    panel.sourceType = 'bom';
+  }
+
   closeMappingModal();
+  runComparison();
 }
 
 // --------------------------------------------------------------------------
