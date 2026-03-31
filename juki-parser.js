@@ -15,6 +15,13 @@
 // Utility helpers
 // --------------------------------------------------------------------------
 
+// roundCoord(s) — rounds a coordinate string to 3 decimal places.
+// Returns the original string unchanged if it isn't a valid number.
+function roundCoord(s) {
+  const n = parseFloat(s);
+  return isNaN(n) ? s : String(Math.round(n * 1000) / 1000);
+}
+
 // getText(contextNode, cssSelector)
 // Returns trimmed text content of the first matching descendant, or ''.
 function getText(ctx, sel) {
@@ -84,8 +91,8 @@ function parsePlacements(doc, componentMap) {
   for (const pl of placements) {
     const refdesStr = getText(pl, 'placementId').toUpperCase();
     const ipn       = getText(pl, 'componentName').toUpperCase();
-    const x         = getAttr(pl, 'placementPosition', 'x');
-    const y         = getAttr(pl, 'placementPosition', 'y');
+    const x         = roundCoord(getAttr(pl, 'placementPosition', 'x'));
+    const y         = roundCoord(getAttr(pl, 'placementPosition', 'y'));
     const angle     = getAttr(pl, 'placementAngle', 'angle');
     const skip      = getAttr(pl, 'skip', 'placement').toUpperCase() || 'NO';
 

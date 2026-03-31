@@ -19,14 +19,10 @@
     <button id="btn-clear" class="btn-fade btn-danger btn-clear">Clear Everything</button>
 
     <div class="config-group">
-      <label for="sel-comparison-field">Compare by</label>
-      <select id="sel-comparison-field">
-        <option value="refdes">Refdes</option>
-        <option value="fn">FN</option>
-        <option value="ipn">IPN</option>
-        <option value="mpn">MPN</option>
-        <option value="cpn">CPN</option>
-      </select>
+      <label class="config-checkbox-label">
+        <input type="checkbox" id="chk-diff-only">
+        Show differences only
+      </label>
     </div>
 
 
@@ -131,9 +127,21 @@
     </div>
   </div>
 
+  <!-- Comparison section — always visible, below panel area -->
+  <div id="comparison-section">
+    <div id="comparison-header">
+      <span id="comparison-title">Comparison</span>
+      <span id="comparison-count"></span>
+    </div>
+    <div id="comparison-body">
+      <p class="comparison-empty">Load data into at least two panels to compare.</p>
+    </div>
+  </div>
+
   <script src="lib/xlsx.full.min.js"></script>
   <script src="parser.js"></script>
   <script src="juki-parser.js"></script>
+  <script src="mmd-parser.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

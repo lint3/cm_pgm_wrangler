@@ -17,7 +17,7 @@ const panels = [
 // Config state
 // --------------------------------------------------------------------------
 const config = {
-  comparisonField: 'refdes',
+  diffOnly: false,
 };
 
 // --------------------------------------------------------------------------
@@ -29,17 +29,16 @@ function escAttr(s) {
 
 // --------------------------------------------------------------------------
 // Config bar wiring
-// initConfigBar: wires event listeners (called once at startup).
-// syncConfigBarUI: sets UI elements to match config (called after any config reset).
-// TODO: rewrite for new app — add global comparisonField selector wiring;
-//   remove Partial wiring (chk-partial removed from HTML).
 // --------------------------------------------------------------------------
 function initConfigBar() {
-  // TODO: rewrite for new app
+  document.getElementById('chk-diff-only').addEventListener('change', e => {
+    config.diffOnly = e.target.checked;
+    runComparison();
+  });
 }
 
 function syncConfigBarUI() {
-  // TODO: rewrite for new app
+  document.getElementById('chk-diff-only').checked = config.diffOnly;
 }
 
 // --------------------------------------------------------------------------
@@ -211,33 +210,278 @@ function deletePanel(id) {
 }
 
 // --------------------------------------------------------------------------
+// parseInputTokens(rawText)
+// Splits freeform text into uppercase IPN tokens.
+// Strips // and # comments, then splits on whitespace/commas/semicolons.
+// IPNs are never ranges, so no range expansion is applied.
+// --------------------------------------------------------------------------
+function parseInputTokens(rawText) {
+  return rawText
+    .replace(/\/\/.*$/gm, '')  // strip // comments
+    .replace(/#.*$/gm,    '')  // strip # comments
+    .split(/[\s,;]+/)
+    .map(t => t.trim().toUpperCase())
+    .filter(t => t.length > 0);
+}
+
+// --------------------------------------------------------------------------
+// buildPanelData(panel)
+// Builds a two-level index for one panel:
+//   Map<IPN, { attributes: {fn,cpn,mpn,description}, refdes: Map<Refdes, {x,y,angle,skip,package}> }>
+//
+// For file panels (bom/juki/mmd): iterates bomRows, grouping by IPN.
+//   XLSX BOM rows have multiple refdes but no coords.
+//   Juki/MMD rows have one refdes with coords.
+// For text panels: each token becomes an IPN with empty attributes and no refdes.
+// --------------------------------------------------------------------------
+function buildPanelData(panel) {
+  const result = new Map();
+
+  if (panel.sourceType === 'text') {
+    for (const token of parseInputTokens(panel.raw)) {
+      if (!result.has(token)) {
+        result.set(token, { attributes: {}, refdes: new Map() });
+      }
+    }
+    return result;
+  }
+
+  // bom / juki / mmd
+  for (const row of (panel.bomRows || [])) {
+    const ipn = row.ipn;
+    if (!ipn) continue;
+
+    if (!result.has(ipn)) {
+      result.set(ipn, {
+        attributes: {
+          fn:          row.fn          || undefined,
+          cpn:         row.cpn         || undefined,
+          mpn:         row.mpn         || undefined,
+          description: row.description || undefined,
+        },
+        refdes: new Map(),
+      });
+    } else {
+      // Merge any attributes present on this row that weren't on the first row
+      const existing = result.get(ipn).attributes;
+      if (!existing.fn          && row.fn)          existing.fn          = row.fn;
+      if (!existing.cpn         && row.cpn)         existing.cpn         = row.cpn;
+      if (!existing.mpn         && row.mpn)         existing.mpn         = row.mpn;
+      if (!existing.description && row.description) existing.description = row.description;
+    }
+
+    // Coord data — only present for Juki/MMD rows (XLSX BOM refdes have no coords)
+    const coords = {};
+    if (row.x       !== undefined) coords.x       = row.x;
+    if (row.y       !== undefined) coords.y        = row.y;
+    if (row.angle   !== undefined) coords.angle    = row.angle;
+    if (row.skip    !== undefined) coords.skip     = row.skip;
+    if (row.package !== undefined) coords.package  = row.package;
+
+    const refdesMap = result.get(ipn).refdes;
+    for (const r of (row.refdes || [])) {
+      refdesMap.set(r, coords);
+    }
+  }
+
+  return result;
+}
+
+// --------------------------------------------------------------------------
+// computeIpnRow(ipn, panelData, panels)
+// Returns a comparison row object for one IPN:
+//   { ipn, panelEntries, refdesRows, attrRows, ipnStatus }
+// --------------------------------------------------------------------------
+function computeIpnRow(ipn, panelData, panels) {
+  const panelEntries = panels.map((_, i) => panelData[i].get(ipn) ?? null);
+
+  // Collect all unique refdes across panels that have this IPN, then natural-sort
+  const allRefdesSet = new Set();
+  for (const entry of panelEntries) {
+    if (!entry) continue;
+    for (const r of entry.refdes.keys()) allRefdesSet.add(r);
+  }
+  const allRefdes = [...allRefdesSet].sort((a, b) => {
+    // Reuse splitRefdes from parser.js for natural ordering
+    const pa = splitRefdes(a), pb = splitRefdes(b);
+    if (pa.prefix !== pb.prefix) return pa.prefix < pb.prefix ? -1 : 1;
+    return pa.num - pb.num;
+  });
+
+  // Build refdes sub-rows
+  const refdesRows = allRefdes.map(r => {
+    const cells        = panelEntries.map(e => e?.refdes.get(r) ?? null);
+    const presentCount = cells.filter(c => c !== null).length;
+
+    let status;
+    if (presentCount < panels.length) {
+      status = 'missing';
+    } else {
+      // Compare coord strings from panels that actually have coord data
+      const coordStrings = cells
+        .filter(c => c !== null && c.x !== undefined)
+        .map(c => `${c.x},${c.y},${c.angle}`);
+      status = (coordStrings.length > 1 && new Set(coordStrings).size > 1) ? 'differ' : 'match';
+    }
+    return { refdes: r, cells, status };
+  });
+
+  // Build attribute sub-rows — only for attrs present in at least one panel
+  const ATTRS = ['fn', 'cpn', 'mpn', 'description'];
+  const attrRows = ATTRS
+    .filter(k => panelEntries.some(e => e?.attributes[k]))
+    .map(k => ({
+      attr:  k,
+      cells: panelEntries.map(e => e?.attributes[k] ?? null),
+    }));
+
+  // IPN-level status
+  const presentCount = panelEntries.filter(e => e !== null).length;
+  let ipnStatus;
+  if (presentCount < panels.length) {
+    ipnStatus = 'missing';
+  } else if (refdesRows.some(r => r.status !== 'match')) {
+    ipnStatus = 'differ';
+  } else {
+    ipnStatus = 'match';
+  }
+
+  return { ipn, panelEntries, refdesRows, attrRows, ipnStatus };
+}
+
+// --------------------------------------------------------------------------
+// renderComparison(compRows, panels)
+// Builds and injects the comparison table HTML.
+// When config.diffOnly is active, match IPN rows are hidden and non-match
+// rows are expanded on render.
+// --------------------------------------------------------------------------
+function renderComparison(compRows, panels) {
+  const body        = document.getElementById('comparison-body');
+  const countEl     = document.getElementById('comparison-count');
+  const totalRows   = compRows.length;
+  const diffRows    = compRows.filter(r => r.ipnStatus !== 'match').length;
+
+  if (totalRows === 0) {
+    body.innerHTML = '<p class="comparison-empty">No IPN data found in loaded panels.</p>';
+    countEl.textContent = '';
+    return;
+  }
+
+  // Update count display
+  if (config.diffOnly) {
+    countEl.textContent = `${diffRows} of ${totalRows} rows`;
+  } else {
+    countEl.textContent = `${totalRows} rows`;
+  }
+
+  // Build table header
+  const panelHeaders = panels.map(p => `<th>${escAttr(p.label)}</th>`).join('');
+  let html = `<table class="comparison-table${config.diffOnly ? ' diff-only' : ''}">`;
+  html += `<thead><tr><th class="col-key">IPN</th>${panelHeaders}</tr></thead><tbody>`;
+
+  for (const row of compRows) {
+    const ipnEsc    = escAttr(row.ipn);
+    const autoOpen  = config.diffOnly && row.ipnStatus !== 'match';
+    const subHidden = autoOpen ? '' : ' hidden';
+    const btnArrow  = autoOpen ? '▼' : '▶';
+
+    // IPN summary row
+    const panelCells = row.panelEntries.map(entry => {
+      if (!entry) return `<td class="cell-absent">—</td>`;
+      const count = entry.refdes.size;
+      const label = count === 0 ? '✓' : `${count} refdes`;
+      return `<td class="cell-present">${escAttr(label)}</td>`;
+    }).join('');
+
+    html += `<tr class="ipn-row row-${row.ipnStatus}" data-ipn="${ipnEsc}">`;
+    html += `<td class="col-key"><button class="btn-expand">${btnArrow}</button> ${ipnEsc}</td>`;
+    html += panelCells;
+    html += `</tr>`;
+
+    // Attribute sub-rows
+    for (const attrRow of row.attrRows) {
+      const attrLabel = attrRow.attr.toUpperCase();
+      const attrCells = attrRow.cells.map(val =>
+        val !== null ? `<td>${escAttr(val)}</td>` : `<td class="cell-absent">—</td>`
+      ).join('');
+      html += `<tr class="sub-row attr-row" data-parent="${ipnEsc}"${subHidden}>`;
+      html += `<td class="col-key col-sub">${attrLabel}</td>${attrCells}`;
+      html += `</tr>`;
+    }
+
+    // Refdes sub-rows
+    for (const refRow of row.refdesRows) {
+      const refdesLabel = escAttr(refRow.refdes);
+      const refdescells = refRow.cells.map(coords => {
+        if (!coords) return `<td class="cell-absent">—</td>`;
+        // Format coords if available, otherwise just a checkmark
+        if (coords.x !== undefined) {
+          const parts = [`${coords.x}, ${coords.y}, ${coords.angle}°`];
+          if (coords.skip && coords.skip !== 'NO') parts.push(`skip:${coords.skip}`);
+          if (coords.package) parts.push(coords.package);
+          return `<td class="cell-present">${escAttr(parts.join(' | '))}</td>`;
+        }
+        return `<td class="cell-present">✓</td>`;
+      }).join('');
+      html += `<tr class="sub-row refdes-row row-${refRow.status}" data-parent="${ipnEsc}"${subHidden}>`;
+      html += `<td class="col-key col-sub">↳ ${refdesLabel}</td>${refdescells}`;
+      html += `</tr>`;
+    }
+  }
+
+  html += '</tbody></table>';
+  body.innerHTML = html;
+
+  // Wire expand/collapse toggle buttons
+  const table = body.querySelector('.comparison-table');
+  table.querySelectorAll('.btn-expand').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const ipn     = btn.closest('tr').dataset.ipn;
+      const subRows = table.querySelectorAll(`[data-parent="${CSS.escape(ipn)}"]`);
+      const isOpen  = subRows.length > 0 && !subRows[0].hasAttribute('hidden');
+      subRows.forEach(r => r.toggleAttribute('hidden', isOpen));
+      btn.textContent = isOpen ? '▶' : '▼';
+    });
+  });
+}
+
+// --------------------------------------------------------------------------
 // runComparison()
-// Computes diff status across all panels and re-renders each one.
-// Called whenever any panel input or config setting changes.
-// TODO: rewrite for new app — tokens are extracted from panel.bomRows via
-//   config.comparisonField instead of parsed from raw text.
+// Builds per-panel data indexes, computes comparison rows, renders the
+// comparison table, and updates panel footer item counts.
 // --------------------------------------------------------------------------
 function runComparison() {
-  // TODO: rewrite for new app
-}
+  // Rebuild per-panel data indexes
+  const panelData = panels.map(buildPanelData);
 
-// --------------------------------------------------------------------------
-// renderParsedOutput(panel, freq)
-// TODO: rewrite for new app — output area removed from panel DOM for now;
-//   will be re-added once comparison logic is implemented.
-// --------------------------------------------------------------------------
-function renderParsedOutput(panel, freq) {
-  // TODO: rewrite for new app
-}
+  // Update each panel's footer count and error expando
+  panels.forEach((panel, i) => {
+    if (panel.footerEl) {
+      panel.footerEl.textContent = panelData[i].size + ' items';
+    }
+    if (panel.errorTriggerEl) renderErrorExpando(panel);
+  });
 
-// --------------------------------------------------------------------------
-// parseInputTokens(rawText, interpretAs)
-// Only used for freeform text panels in the new app.
-// TODO: rewrite for new app — second param renamed to interpretAs;
-//   only called when panel.sourceType === 'text'.
-// --------------------------------------------------------------------------
-function parseInputTokens(rawText, interpretAs) {
-  // TODO: rewrite for new app
+  // Need at least 2 panels with any data to show a comparison
+  const activePanels = panels.filter((_, i) => panelData[i].size > 0);
+  if (activePanels.length < 2) {
+    const body    = document.getElementById('comparison-body');
+    const countEl = document.getElementById('comparison-count');
+    if (body)    body.innerHTML = '<p class="comparison-empty">Load data into at least two panels to compare.</p>';
+    if (countEl) countEl.textContent = '';
+    return;
+  }
+
+  // Union of all IPNs across all panels, natural-sorted
+  const allIPNsSet = new Set();
+  for (const pd of panelData) pd.forEach((_, ipn) => allIPNsSet.add(ipn));
+  const allIPNs = [...allIPNsSet].sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
+
+  // Build one comparison row per IPN
+  const compRows = allIPNs.map(ipn => computeIpnRow(ipn, panelData, panels));
+
+  renderComparison(compRows, panels);
 }
 
 
@@ -353,6 +597,22 @@ function handleBomFile(file, panelId) {
         panel.meta        = meta;
         panel.parseErrors = errors;
         panel.sourceType  = 'juki';
+      }
+      runComparison();
+    };
+    reader.readAsText(file);
+
+  } else if (ext === 'mmd') {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const errors          = [];
+      const { meta, rows }  = parseMmdFile(e.target.result, errors);
+      const panel           = panels.find(p => p.id === panelId);
+      if (panel) {
+        panel.bomRows     = rows;
+        panel.meta        = meta;
+        panel.parseErrors = errors;
+        panel.sourceType  = 'mmd';
       }
       runComparison();
     };

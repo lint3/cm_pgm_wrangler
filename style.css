@@ -696,3 +696,126 @@ input.panel-label:hover { outline: none; border-color: #d0d3da; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* -------------------------------------------------------------------------
+   Comparison section
+------------------------------------------------------------------------- */
+#comparison-section {
+  margin: 1rem 1rem 2rem;
+}
+
+#comparison-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+
+#comparison-title {
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #444;
+}
+
+#comparison-count {
+  font-size: 12px;
+  color: #888;
+}
+
+.comparison-empty {
+  font-size: 12px;
+  color: #aaa;
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+/* Config bar checkbox */
+.config-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Comparison table */
+.comparison-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  width: 100%;
+}
+
+.comparison-table th,
+.comparison-table td {
+  border: 1px solid #d0d3da;
+  padding: 0.2rem 0.5rem;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.comparison-table th {
+  background: #eceef1;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: #555;
+  position: sticky;
+  top: 0;
+}
+
+/* IPN key column */
+.col-key {
+  white-space: nowrap;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+/* Sub-row indent */
+.col-sub {
+  padding-left: 1.5rem;
+  color: #666;
+  font-size: 11px;
+}
+
+/* Row status colors */
+.row-match   { background: #ffffff; }
+.row-differ  { background: #fff8e0; }
+.row-missing { background: #fff0f0; }
+
+/* Sub-rows inherit lighter tints so the IPN row reads as the header */
+.sub-row.row-differ  { background: #fffcf0; }
+.sub-row.row-missing { background: #fff7f7; }
+
+/* Present / absent cells */
+.cell-absent {
+  color: #bbb;
+}
+
+.cell-present {
+  color: #333;
+}
+
+/* Expand/collapse toggle button */
+.btn-expand {
+  background: none;
+  border: none;
+  padding: 0 0.25rem 0 0;
+  cursor: pointer;
+  font-size: 9px;
+  color: #888;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.btn-expand:hover {
+  color: #333;
+}
+
+/* "Show differences only" — hide match rows when .diff-only is on the table */
+.comparison-table.diff-only .ipn-row.row-match {
+  display: none;
+}
