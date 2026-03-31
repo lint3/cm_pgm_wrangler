@@ -328,16 +328,36 @@ let _pendingPanelId  = null;
 //   instead of global bom; will eventually dispatch to CSV/XML parsers too.
 // --------------------------------------------------------------------------
 function handleBomFile(file, panelId) {
-  const reader = new FileReader();
-  reader.onload = e => {
-    const workbook = XLSX.read(e.target.result, { type: 'array' });
-    const sheet    = workbook.Sheets[workbook.SheetNames[0]];
-    // header:1 gives array-of-arrays; defval:'' keeps empty cells in place
-    const allRows  = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-    _pendingPanelId = panelId;
-    showMappingModal(allRows);
-  };
-  reader.readAsArrayBuffer(file);
+  const ext = file.name.split('.').pop().toLowerCase();
+
+  if (ext === 'xlsx') {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const workbook = XLSX.read(e.target.result, { type: 'array' });
+      const sheet    = workbook.Sheets[workbook.SheetNames[0]];
+      // header:1 gives array-of-arrays; defval:'' keeps empty cells in place
+      const allRows  = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+      _pendingPanelId = panelId;
+      showMappingModal(allRows);
+    };
+    reader.readAsArrayBuffer(file);
+
+  } else if (ext === 'iss') {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const errors          = [];
+      const { meta, rows }  = parseIssFile(e.target.result, errors);
+      const panel           = panels.find(p => p.id === panelId);
+      if (panel) {
+        panel.bomRows     = rows;
+        panel.meta        = meta;
+        panel.parseErrors = errors;
+        panel.sourceType  = 'juki';
+      }
+      runComparison();
+    };
+    reader.readAsText(file);
+  }
 }
 
 // TODO: rewrite for new app — file import moves to per-panel (triggered by buttons
@@ -517,8 +537,27 @@ function openTableModal(panel) {
   if (!panel.bomRows || panel.bomRows.length === 0) {
     body.innerHTML = '<p class="table-modal-empty">(no data loaded)</p>';
   } else {
-    // Collect all column keys across all rows (preserves insertion order)
-    const keys = [...new Set(panel.bomRows.flatMap(row => Object.keys(row)))];
+    let html = '';
+
+    // Metadata section — only rendered when panel.meta has non-empty values
+    if (panel.meta) {
+      const META_LABELS = [
+        { key: 'assemblyName',    label: 'Assembly' },
+        { key: 'lineName',        label: 'Line' },
+        { key: 'lastEdit',        label: 'Last edit' },
+        { key: 'totalPlacements', label: 'Total placements' },
+      ];
+      const metaRows = META_LABELS
+        .filter(({ key }) => panel.meta[key])
+        .map(({ key, label }) => `<dt>${escAttr(label)}</dt><dd>${escAttr(panel.meta[key])}</dd>`)
+        .join('');
+      if (metaRows) {
+        html += `<dl class="table-modal-meta">${metaRows}</dl>`;
+      }
+    }
+
+    // Rows table — collect all unique keys across all rows (preserves insertion order)
+    const keys  = [...new Set(panel.bomRows.flatMap(row => Object.keys(row)))];
     const thead = keys.map(k => `<th>${escAttr(k.toUpperCase())}</th>`).join('');
     const tbody = panel.bomRows.map(row => {
       const cells = keys.map(k => {
@@ -528,7 +567,9 @@ function openTableModal(panel) {
       }).join('');
       return `<tr>${cells}</tr>`;
     }).join('');
-    body.innerHTML = `<table class="full-table"><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`;
+    html += `<table class="full-table"><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`;
+
+    body.innerHTML = html;
   }
 
   document.getElementById('table-modal').removeAttribute('hidden');
