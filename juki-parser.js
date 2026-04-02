@@ -15,11 +15,11 @@
 // Utility helpers
 // --------------------------------------------------------------------------
 
-// roundCoord(s) — rounds a coordinate string to 3 decimal places.
+// roundCoord(s) — rounds a coordinate string to 2 decimal places.
 // Returns the original string unchanged if it isn't a valid number.
 function roundCoord(s) {
   const n = parseFloat(s);
-  return isNaN(n) ? s : String(Math.round(n * 1000) / 1000);
+  return isNaN(n) ? s : String(Math.round(n * 100) / 100);
 }
 
 // getText(contextNode, cssSelector)

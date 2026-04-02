@@ -18,12 +18,15 @@
 // Utility helpers
 // --------------------------------------------------------------------------
 
-// roundCoord(s) — rounds a coordinate string to 3 decimal places.
-// Returns the original string unchanged if it isn't a valid number.
-function roundCoord(s) {
+// roundCoord(s, scale?) — scales then rounds a coordinate string to 2 decimal places.
+// scale defaults to 1. Returns the original string unchanged if it isn't a valid number.
+function roundCoord(s, scale = 1) {
   const n = parseFloat(s);
-  return isNaN(n) ? s : String(Math.round(n * 1000) / 1000);
+  return isNaN(n) ? s : String(Math.round(n * scale * 100) / 100);
 }
+
+// MMD coordinates are in units 1000× larger than ISS (µm vs mm).
+const MMD_COORD_SCALE = 0.001;
 
 // --------------------------------------------------------------------------
 // parseMeta(sections)
@@ -51,13 +54,27 @@ function parseMeta(sections) {
 //   errorsOut — optional array; format errors are pushed here as strings
 //
 // Returns { meta, rows }.
+//
+// Row field counts:
+//   6 fields — normal component:  X, Y, Angle, IPN, Refdes, Package
+//   5 fields — fiducial:          X, Y, Angle, MarkerType, Refdes
+//     Fiducials have no BOM IPN. They are assigned IPN = "FIDUCIAL" and
+//     the marker type (e.g. "r30") is stored as the package field.
+//     The declared Part Count excludes fiducials, so they are counted
+//     separately when validating against it.
+//
+// Note on fiducial refdes sorting: refdes like "BoardFid_1" contain an
+// underscore, which falls outside the splitRefdes regex. They sort
+// lexicographically as plain strings. With the 2–4 fiducials typical on
+// a board this is harmless, but "BoardFid_2" would sort after "BoardFid_10".
 // --------------------------------------------------------------------------
 function parseMmdFile(text, errorsOut) {
   // sections: Map<sectionNameLower, Map<keyLower, value>>
-  const sections  = {};
-  const dataRows  = [];
-  let   section   = null; // current section name (lowercased)
-  let   lineNum   = 0;
+  const sections     = {};
+  const dataRows     = [];
+  let   section      = null; // current section name (lowercased)
+  let   lineNum      = 0;
+  let   fiducialCount = 0;
 
   for (const rawLine of text.split(/\r?\n/)) {
     lineNum++;
@@ -80,11 +97,26 @@ function parseMmdFile(text, errorsOut) {
       }
 
       const valueStr = line.slice(eqIdx + 1);
-      // Fields are tab-separated: X, Y, Angle, IPN, Refdes, Package
+      // Fields are tab-separated
       const fields = valueStr.split('\t');
 
+      if (fields.length === 5) {
+        // Fiducial row — no package field. Field order: X, Y, Angle, MarkerType, Refdes.
+        const [xRaw, yRaw, angle, markerType, refdesStr] = fields.map(f => f.trim());
+        fiducialCount++;
+        dataRows.push({
+          refdes:  refdesStr.toUpperCase() ? [refdesStr.toUpperCase()] : [],
+          ipn:     'FIDUCIAL',
+          package: markerType, // e.g. "r30" — fiducial marker size/type code
+          x: roundCoord(xRaw, MMD_COORD_SCALE),
+          y: roundCoord(yRaw, MMD_COORD_SCALE),
+          angle,
+        });
+        continue;
+      }
+
       if (fields.length !== 6) {
-        if (errorsOut) errorsOut.push(`Line ${lineNum}: expected 6 tab-separated fields, got ${fields.length}`);
+        if (errorsOut) errorsOut.push(`Line ${lineNum}: expected 5 or 6 tab-separated fields, got ${fields.length}`);
         continue;
       }
 
@@ -94,8 +126,8 @@ function parseMmdFile(text, errorsOut) {
         refdes:  refdesStr.toUpperCase() ? [refdesStr.toUpperCase()] : [],
         ipn:     ipn.toUpperCase(),
         package: pkg,
-        x: roundCoord(xRaw),
-        y: roundCoord(yRaw),
+        x: roundCoord(xRaw, MMD_COORD_SCALE),
+        y: roundCoord(yRaw, MMD_COORD_SCALE),
         angle,
       });
       continue;
@@ -113,16 +145,22 @@ function parseMmdFile(text, errorsOut) {
     }
   }
 
-  // Warn if actual row count doesn't match declared Part Count
-  const meta         = parseMeta(sections);
+  const meta          = parseMeta(sections);
   const declaredCount = parseInt(meta.partCount, 10);
-  if (!isNaN(declaredCount) && dataRows.length !== declaredCount) {
+  const componentCount = dataRows.length - fiducialCount;
+
+  // Warn only if component count (excluding fiducials) doesn't match declared Part Count
+  if (!isNaN(declaredCount) && componentCount !== declaredCount) {
     if (errorsOut) {
       errorsOut.push(
-        `Part Count declared ${declaredCount} but parsed ${dataRows.length} rows`
+        `Part Count declared ${declaredCount} but parsed ${componentCount} components` +
+        (fiducialCount > 0 ? ` (+ ${fiducialCount} fiducials)` : '')
       );
     }
   }
+
+  // Store fiducial count in meta for display in View Full Table
+  if (fiducialCount > 0) meta.fiducialCount = String(fiducialCount);
 
   return { meta, rows: dataRows };
 }

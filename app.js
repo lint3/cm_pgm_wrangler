@@ -17,7 +17,7 @@ const panels = [
 // Config state
 // --------------------------------------------------------------------------
 const config = {
-  diffOnly: false,
+  viewMode: 'all', // 'all' | 'diff-rows' | 'diff-only'
 };
 
 // --------------------------------------------------------------------------
@@ -31,14 +31,17 @@ function escAttr(s) {
 // Config bar wiring
 // --------------------------------------------------------------------------
 function initConfigBar() {
-  document.getElementById('chk-diff-only').addEventListener('change', e => {
-    config.diffOnly = e.target.checked;
-    runComparison();
+  document.querySelectorAll('input[name="view-mode"]').forEach(radio => {
+    radio.addEventListener('change', e => {
+      config.viewMode = e.target.value;
+      runComparison();
+    });
   });
 }
 
 function syncConfigBarUI() {
-  document.getElementById('chk-diff-only').checked = config.diffOnly;
+  const radio = document.querySelector(`input[name="view-mode"][value="${config.viewMode}"]`);
+  if (radio) radio.checked = true;
 }
 
 // --------------------------------------------------------------------------
@@ -327,7 +330,7 @@ function computeIpnRow(ipn, panelData, panels) {
   });
 
   // Build attribute sub-rows — only for attrs present in at least one panel
-  const ATTRS = ['fn', 'cpn', 'mpn', 'description'];
+  const ATTRS = ['fn', 'cpn', 'mpn'];
   const attrRows = ATTRS
     .filter(k => panelEntries.some(e => e?.attributes[k]))
     .map(k => ({
@@ -350,10 +353,191 @@ function computeIpnRow(ipn, panelData, panels) {
 }
 
 // --------------------------------------------------------------------------
+// postProcessIpnChanges(compRows, panels)
+// Post-processing step run after all IPN rows are computed.
+// Finds pairs of 'missing' IPN rows that have identical refdes sets AND are
+// perfectly complementary (one covers exactly the panels the other lacks).
+// Such a pair is collapsed into a single 'changed' row: IPN-A ↔ IPN-B.
+//
+// Ambiguous cases (two pairs share the same refdes key) are left as missing.
+// Empty refdes keys (IPNs with no placed parts) are never collapsed.
+// --------------------------------------------------------------------------
+function postProcessIpnChanges(compRows, panels) {
+  const allPanelsMask = (1 << panels.length) - 1;
+
+  // Record original index of each row for later positional insertion
+  const originalIdx = new Map(); // ipn → index in compRows
+  const missingRows = [];
+  for (let i = 0; i < compRows.length; i++) {
+    const row = compRows[i];
+    originalIdx.set(row.ipn, i);
+    if (row.ipnStatus === 'missing') missingRows.push(row);
+  }
+
+  // Annotate each missing row with its presence bitmask and refdes key
+  const enriched = missingRows.map(row => {
+    let presenceMask = 0;
+    const allRefdes  = new Set();
+    row.panelEntries.forEach((entry, i) => {
+      if (entry !== null) {
+        presenceMask |= (1 << i);
+        entry.refdes.forEach((_, r) => allRefdes.add(r));
+      }
+    });
+    const refdesKey = [...allRefdes].sort().join('|');
+    return { row, presenceMask, refdesKey };
+  });
+
+  // Group by refdesKey; skip empty keys (IPNs with no placed parts)
+  const byRefdesKey = new Map(); // refdesKey → enriched[]
+  for (const item of enriched) {
+    if (!item.refdesKey) continue;
+    if (!byRefdesKey.has(item.refdesKey)) byRefdesKey.set(item.refdesKey, []);
+    byRefdesKey.get(item.refdesKey).push(item);
+  }
+
+  // Find complementary pairs — claim each IPN at most once
+  const claimed     = new Set();  // IPN strings already in a merged pair
+  const mergedPairs = [];         // { mergedRow, earlierIdx }
+
+  for (const items of byRefdesKey.values()) {
+    if (items.length < 2) continue;
+
+    // If more than two items share a refdesKey the match is ambiguous; skip all
+    if (items.length > 2) continue;
+
+    const [A, B] = items;
+    if (claimed.has(A.row.ipn) || claimed.has(B.row.ipn)) continue;
+    if ((A.presenceMask | B.presenceMask) !== allPanelsMask) continue;
+    if ((A.presenceMask & B.presenceMask) !== 0) continue;
+
+    // A and B are complementary — build the merged row
+    claimed.add(A.row.ipn);
+    claimed.add(B.row.ipn);
+
+    // Alphabetical order for display: "IPN-A ↔ IPN-B"
+    const [first, second] = A.row.ipn < B.row.ipn ? [A, B] : [B, A];
+    const mergedIpn = `${first.row.ipn} ↔ ${second.row.ipn}`;
+
+    // panelEntries: each panel takes from whichever source IPN is present there
+    const mergedPanelEntries = panels.map((_, i) =>
+      A.row.panelEntries[i] !== null ? A.row.panelEntries[i] : B.row.panelEntries[i]
+    );
+
+    // refdesRows: merge cells from A and B (refdes sets are identical, cells are disjoint)
+    const refdesMergeMap = new Map(); // refdes → cells[]
+    for (const refRow of A.row.refdesRows) {
+      refdesMergeMap.set(refRow.refdes, [...refRow.cells]);
+    }
+    for (const refRow of B.row.refdesRows) {
+      const existing = refdesMergeMap.get(refRow.refdes);
+      if (existing) {
+        refRow.cells.forEach((cell, i) => { if (cell !== null) existing[i] = cell; });
+      } else {
+        refdesMergeMap.set(refRow.refdes, [...refRow.cells]);
+      }
+    }
+    const mergedRefdesRows = [...refdesMergeMap.entries()].map(([refdes, cells]) => ({
+      refdes,
+      cells,
+      status: cells.every(c => c !== null) ? 'match' : 'differ',
+    }));
+
+    // attrRows: combine from both sources, deduplicate by attr key, merge cells
+    const attrMergeMap = new Map(); // attr → cells[]
+    for (const attrRow of [...A.row.attrRows, ...B.row.attrRows]) {
+      if (!attrMergeMap.has(attrRow.attr)) {
+        attrMergeMap.set(attrRow.attr, [...attrRow.cells]);
+      } else {
+        const existing = attrMergeMap.get(attrRow.attr);
+        attrRow.cells.forEach((cell, i) => { if (cell !== null) existing[i] = cell; });
+      }
+    }
+    const mergedAttrRows = [...attrMergeMap.entries()].map(([attr, cells]) => ({ attr, cells }));
+
+    const mergedRow = {
+      ipn:          mergedIpn,
+      ipnStatus:    'changed',
+      panelEntries: mergedPanelEntries,
+      refdesRows:   mergedRefdesRows,
+      attrRows:     mergedAttrRows,
+      changedA:     { ipn: A.row.ipn, mask: A.presenceMask },
+      changedB:     { ipn: B.row.ipn, mask: B.presenceMask },
+    };
+
+    mergedPairs.push({
+      mergedRow,
+      earlierIdx: Math.min(originalIdx.get(A.row.ipn), originalIdx.get(B.row.ipn)),
+    });
+  }
+
+  if (mergedPairs.length === 0) return compRows;
+
+  // Reconstruct compRows: at the position of the earlier source IPN, insert the
+  // merged row; skip both source IPNs wherever they appear.
+  const mergedByEarlierIdx = new Map(mergedPairs.map(p => [p.earlierIdx, p.mergedRow]));
+
+  const result = [];
+  for (let i = 0; i < compRows.length; i++) {
+    if (mergedByEarlierIdx.has(i)) {
+      // Insert the merged row at the position of the earlier source IPN
+      result.push(mergedByEarlierIdx.get(i));
+      // Fall through to the claimed check — the source row at i is skipped below
+    }
+    if (!claimed.has(compRows[i].ipn)) {
+      result.push(compRows[i]);
+    }
+  }
+  return result;
+}
+
+// --------------------------------------------------------------------------
+// buildRefdescells(refRow, diffOnly)
+// Builds the HTML <td> cells for one refdes sub-row.
+//
+// In normal mode: each cell shows all coord fields (location, angle, skip, pkg).
+// In diff-only mode: each cell shows only the fields that differ across panels.
+//   Location (X,Y) is treated as a single unit — if either differs, both are shown.
+//   Angle, skip, and package are each shown/hidden independently.
+// --------------------------------------------------------------------------
+function buildRefdescells(refRow, diffOnly) {
+  if (!diffOnly) {
+    return refRow.cells.map(coords => {
+      if (!coords) return `<td class="cell-absent">—</td>`;
+      if (coords.x !== undefined) {
+        const parts = [`${coords.x}, ${coords.y}, ${coords.angle}°`];
+        if (coords.skip && coords.skip !== 'NO') parts.push(`skip:${coords.skip}`);
+        if (coords.package) parts.push(coords.package);
+        return `<td class="cell-present">${escAttr(parts.join(' | '))}</td>`;
+      }
+      return `<td class="cell-present">✓</td>`;
+    }).join('');
+  }
+
+  // Diff-only: determine which fields vary across panels with coord data
+  const coordCells = refRow.cells.filter(c => c !== null && c.x !== undefined);
+  const showLocation = coordCells.length > 1 && new Set(coordCells.map(c => `${c.x},${c.y}`)).size > 1;
+  const showAngle    = coordCells.length > 1 && new Set(coordCells.map(c => String(c.angle))).size > 1;
+  const showSkip     = coordCells.length > 1 && new Set(coordCells.map(c => c.skip ?? '')).size > 1;
+  const showPackage  = coordCells.length > 1 && new Set(coordCells.map(c => c.package ?? '')).size > 1;
+
+  return refRow.cells.map(coords => {
+    if (!coords) return `<td class="cell-absent">—</td>`;
+    if (coords.x === undefined) return `<td class="cell-present">✓</td>`;
+    const parts = [];
+    if (showLocation) parts.push(`${coords.x}, ${coords.y}`);
+    if (showAngle)    parts.push(`${coords.angle}°`);
+    if (showSkip && coords.skip && coords.skip !== 'NO') parts.push(`skip:${coords.skip}`);
+    if (showPackage && coords.package) parts.push(coords.package);
+    return parts.length > 0
+      ? `<td class="cell-present">${escAttr(parts.join(' | '))}</td>`
+      : `<td></td>`;
+  }).join('');
+}
+
+// --------------------------------------------------------------------------
 // renderComparison(compRows, panels)
 // Builds and injects the comparison table HTML.
-// When config.diffOnly is active, match IPN rows are hidden and non-match
-// rows are expanded on render.
 // --------------------------------------------------------------------------
 function renderComparison(compRows, panels) {
   const body        = document.getElementById('comparison-body');
@@ -361,40 +545,68 @@ function renderComparison(compRows, panels) {
   const totalRows   = compRows.length;
   const diffRows    = compRows.filter(r => r.ipnStatus !== 'match').length;
 
+  const hideControls = () => {
+    document.getElementById('btn-expand-all').setAttribute('hidden', '');
+    document.getElementById('btn-collapse-all').setAttribute('hidden', '');
+  };
+
   if (totalRows === 0) {
     body.innerHTML = '<p class="comparison-empty">No IPN data found in loaded panels.</p>';
     countEl.textContent = '';
+    hideControls();
     return;
   }
 
   // Update count display
-  if (config.diffOnly) {
+  if (config.viewMode === 'diff-rows' || config.viewMode === 'diff-only') {
     countEl.textContent = `${diffRows} of ${totalRows} rows`;
   } else {
     countEl.textContent = `${totalRows} rows`;
   }
 
+  // Both diff-rows and diff-only hide matching IPN rows via CSS class on the table
+  const tableClass = (config.viewMode === 'diff-rows' || config.viewMode === 'diff-only') ? ' view-diff-rows' : '';
+
+  // Non-match rows auto-expand in any non-'all' mode
+  const autoExpandDiff = config.viewMode !== 'all';
+
   // Build table header
   const panelHeaders = panels.map(p => `<th>${escAttr(p.label)}</th>`).join('');
-  let html = `<table class="comparison-table${config.diffOnly ? ' diff-only' : ''}">`;
+  let html = `<table class="comparison-table${tableClass}">`;
   html += `<thead><tr><th class="col-key">IPN</th>${panelHeaders}</tr></thead><tbody>`;
 
   for (const row of compRows) {
     const ipnEsc    = escAttr(row.ipn);
-    const autoOpen  = config.diffOnly && row.ipnStatus !== 'match';
+    const autoOpen  = autoExpandDiff && row.ipnStatus !== 'match';
     const subHidden = autoOpen ? '' : ' hidden';
     const btnArrow  = autoOpen ? '▼' : '▶';
 
-    // IPN summary row
-    const panelCells = row.panelEntries.map(entry => {
-      if (!entry) return `<td class="cell-absent">—</td>`;
-      const count = entry.refdes.size;
-      const label = count === 0 ? '✓' : `${count} refdes`;
-      return `<td class="cell-present">${escAttr(label)}</td>`;
-    }).join('');
+    // IPN summary row — changed rows show which IPN applies per panel
+    let panelCells;
+    if (row.ipnStatus === 'changed') {
+      panelCells = row.panelEntries.map((entry, i) => {
+        if (!entry) return `<td class="cell-absent">—</td>`;
+        const count    = entry.refdes.size;
+        const panelIpn = (row.changedA.mask & (1 << i)) ? row.changedA.ipn : row.changedB.ipn;
+        const label    = `${panelIpn} — ${count} refdes`;
+        return `<td class="cell-present">${escAttr(label)}</td>`;
+      }).join('');
+    } else {
+      panelCells = row.panelEntries.map(entry => {
+        if (!entry) return `<td class="cell-absent">—</td>`;
+        const count = entry.refdes.size;
+        const label = count === 0 ? '✓' : `${count} refdes`;
+        return `<td class="cell-present">${escAttr(label)}</td>`;
+      }).join('');
+    }
+
+    // Key cell — changed rows get a badge
+    const ipnDisplay = row.ipnStatus === 'changed'
+      ? `${ipnEsc} <span class="badge-changed">changed</span>`
+      : ipnEsc;
 
     html += `<tr class="ipn-row row-${row.ipnStatus}" data-ipn="${ipnEsc}">`;
-    html += `<td class="col-key"><button class="btn-expand">${btnArrow}</button> ${ipnEsc}</td>`;
+    html += `<td class="col-key"><button class="btn-expand">${btnArrow}</button> ${ipnDisplay}</td>`;
     html += panelCells;
     html += `</tr>`;
 
@@ -409,20 +621,11 @@ function renderComparison(compRows, panels) {
       html += `</tr>`;
     }
 
-    // Refdes sub-rows
+    // Refdes sub-rows — cell content filtered in 'diff-only' mode
+    const diffOnlyCells = config.viewMode === 'diff-only';
     for (const refRow of row.refdesRows) {
       const refdesLabel = escAttr(refRow.refdes);
-      const refdescells = refRow.cells.map(coords => {
-        if (!coords) return `<td class="cell-absent">—</td>`;
-        // Format coords if available, otherwise just a checkmark
-        if (coords.x !== undefined) {
-          const parts = [`${coords.x}, ${coords.y}, ${coords.angle}°`];
-          if (coords.skip && coords.skip !== 'NO') parts.push(`skip:${coords.skip}`);
-          if (coords.package) parts.push(coords.package);
-          return `<td class="cell-present">${escAttr(parts.join(' | '))}</td>`;
-        }
-        return `<td class="cell-present">✓</td>`;
-      }).join('');
+      const refdescells = buildRefdescells(refRow, diffOnlyCells);
       html += `<tr class="sub-row refdes-row row-${refRow.status}" data-parent="${ipnEsc}"${subHidden}>`;
       html += `<td class="col-key col-sub">↳ ${refdesLabel}</td>${refdescells}`;
       html += `</tr>`;
@@ -432,7 +635,7 @@ function renderComparison(compRows, panels) {
   html += '</tbody></table>';
   body.innerHTML = html;
 
-  // Wire expand/collapse toggle buttons
+  // Wire per-row expand/collapse toggle buttons
   const table = body.querySelector('.comparison-table');
   table.querySelectorAll('.btn-expand').forEach(btn => {
     btn.addEventListener('click', e => {
@@ -444,6 +647,34 @@ function renderComparison(compRows, panels) {
       btn.textContent = isOpen ? '▶' : '▼';
     });
   });
+
+  // Wire expand-all / collapse-all buttons (shown only when table is present)
+  const btnExpandAll   = document.getElementById('btn-expand-all');
+  const btnCollapseAll = document.getElementById('btn-collapse-all');
+
+  function setAllExpanded(open) {
+    table.querySelectorAll('.sub-row').forEach(r => {
+      // In diff-rows and diff-only modes, don't expand sub-rows of hidden match rows
+      if (open && config.viewMode !== 'all') {
+        const parentIpn = r.dataset.parent;
+        const parentRow = table.querySelector(`.ipn-row[data-ipn="${CSS.escape(parentIpn)}"]`);
+        if (parentRow?.classList.contains('row-match')) return;
+      }
+      r.toggleAttribute('hidden', !open);
+    });
+    table.querySelectorAll('.btn-expand').forEach(b => {
+      if (open && config.viewMode !== 'all') {
+        const parentRow = b.closest('tr');
+        if (parentRow?.classList.contains('row-match')) return;
+      }
+      b.textContent = open ? '▼' : '▶';
+    });
+  }
+
+  btnExpandAll.removeAttribute('hidden');
+  btnCollapseAll.removeAttribute('hidden');
+  btnExpandAll.onclick   = () => setAllExpanded(true);
+  btnCollapseAll.onclick = () => setAllExpanded(false);
 }
 
 // --------------------------------------------------------------------------
@@ -470,6 +701,8 @@ function runComparison() {
     const countEl = document.getElementById('comparison-count');
     if (body)    body.innerHTML = '<p class="comparison-empty">Load data into at least two panels to compare.</p>';
     if (countEl) countEl.textContent = '';
+    document.getElementById('btn-expand-all').setAttribute('hidden', '');
+    document.getElementById('btn-collapse-all').setAttribute('hidden', '');
     return;
   }
 
@@ -478,8 +711,9 @@ function runComparison() {
   for (const pd of panelData) pd.forEach((_, ipn) => allIPNsSet.add(ipn));
   const allIPNs = [...allIPNsSet].sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
 
-  // Build one comparison row per IPN
-  const compRows = allIPNs.map(ipn => computeIpnRow(ipn, panelData, panels));
+  // Build one comparison row per IPN, then collapse complementary IPN-change pairs
+  const rawRows  = allIPNs.map(ipn => computeIpnRow(ipn, panelData, panels));
+  const compRows = postProcessIpnChanges(rawRows, panels);
 
   renderComparison(compRows, panels);
 }
@@ -806,6 +1040,7 @@ function openTableModal(panel) {
         { key: 'lineName',        label: 'Line' },
         { key: 'lastEdit',        label: 'Last edit' },
         { key: 'totalPlacements', label: 'Total placements' },
+        { key: 'fiducialCount',   label: 'Fiducials' },
       ];
       const metaRows = META_LABELS
         .filter(({ key }) => panel.meta[key])

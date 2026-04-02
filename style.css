@@ -731,11 +731,16 @@ input.panel-label:hover { outline: none; border-color: #d0d3da; }
   padding: 1.5rem 0;
 }
 
-/* Config bar checkbox */
-.config-checkbox-label {
+/* Config bar view-mode radio group */
+.config-radio-heading {
+  font-size: 13px;
+  color: #555;
+}
+
+.config-radio-label {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.3rem;
   font-size: 13px;
   cursor: pointer;
   user-select: none;
@@ -785,10 +790,22 @@ input.panel-label:hover { outline: none; border-color: #d0d3da; }
 .row-match   { background: #ffffff; }
 .row-differ  { background: #fff8e0; }
 .row-missing { background: #fff0f0; }
+.row-changed { background: #eef3ff; }
 
-/* Sub-rows inherit lighter tints so the IPN row reads as the header */
-.sub-row.row-differ  { background: #fffcf0; }
-.sub-row.row-missing { background: #fff7f7; }
+/* Sub-rows have no color tint — status color is on the IPN row only */
+.sub-row.row-differ,
+.sub-row.row-missing { background: #ffffff; }
+
+/* Badge shown in IPN cell of a changed row */
+.badge-changed {
+  font-size: 9px;
+  background: #c7d7ff;
+  color: #2a4aaa;
+  border-radius: 3px;
+  padding: 0 3px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
 
 /* Present / absent cells */
 .cell-absent {
@@ -797,6 +814,13 @@ input.panel-label:hover { outline: none; border-color: #d0d3da; }
 
 .cell-present {
   color: #333;
+}
+
+/* Expand all / Collapse all buttons in comparison header */
+.btn-comparison-ctrl {
+  font-size: 11px;
+  padding: 0.1rem 0.5rem;
+  color: #555;
 }
 
 /* Expand/collapse toggle button */
@@ -815,7 +839,7 @@ input.panel-label:hover { outline: none; border-color: #d0d3da; }
   color: #333;
 }
 
-/* "Show differences only" — hide match rows when .diff-only is on the table */
-.comparison-table.diff-only .ipn-row.row-match {
+/* "Rows with differences" — hide match rows when .view-diff-rows is on the table */
+.comparison-table.view-diff-rows .ipn-row.row-match {
   display: none;
 }
