@@ -668,16 +668,20 @@ const ROLE_OPTIONS = [
 
 // --------------------------------------------------------------------------
 // BOM import
-// "Load BOM" button triggers a hidden file input. Drag-and-drop anywhere on
-// the page also works. SheetJS reads sheet 1, then the column-mapping modal
-// is shown.
+// Drag-and-drop or browse anywhere on the page triggers handleBomFile().
+// SheetJS (XLSX) reads sheet 1 then shows the column-mapping modal.
+// ISS and MMD files are parsed directly via a dispatch table.
 // --------------------------------------------------------------------------
 
-// Stored while the modal is open; cleared on cancel or confirm.
-// All raw rows from the file (not pre-split); header row is chosen by the user.
-let _pendingAllRows  = null;
-let _pendingPanelId  = null;
-let _pendingFilename = null;
+// Parser dispatch table for text-based file formats.
+const TEXT_FILE_PARSERS = {
+  iss: { parse: parseIssFile, sourceType: 'juki' },
+  mmd: { parse: parseMmdFile, sourceType: 'mmd'  },
+};
+
+// State held while the mapping modal is open; cleared on close.
+let _pendingAllRows  = null; // needed by repopulateMappingTable (called from static handler)
+let _pendingConfirm  = null; // closure that applies the mapping to the target panel
 
 // --------------------------------------------------------------------------
 // handleBomFile(file, panelId)
@@ -694,42 +698,19 @@ function handleBomFile(file, panelId) {
       const sheet    = workbook.Sheets[workbook.SheetNames[0]];
       // header:1 gives array-of-arrays; defval:'' keeps empty cells in place
       const allRows  = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-      _pendingPanelId  = panelId;
-      _pendingFilename = file.name;
-      showMappingModal(allRows);
+      showMappingModal(allRows, panelId, file.name);
     };
     reader.readAsArrayBuffer(file);
 
-  } else if (ext === 'iss') {
+  } else {
+    const spec = TEXT_FILE_PARSERS[ext];
+    if (!spec) return;
     const reader = new FileReader();
     reader.onload = e => {
-      const errors          = [];
-      const { meta, rows }  = parseIssFile(e.target.result, errors);
-      const panel           = panels.find(p => p.id === panelId);
-      if (panel) {
-        panel.bomRows     = rows;
-        panel.meta        = meta;
-        panel.parseErrors = errors;
-        panel.sourceType  = 'juki';
-        panel.filename    = file.name;
-      }
-      runComparison();
-    };
-    reader.readAsText(file);
-
-  } else if (ext === 'mmd') {
-    const reader = new FileReader();
-    reader.onload = e => {
-      const errors          = [];
-      const { meta, rows }  = parseMmdFile(e.target.result, errors);
-      const panel           = panels.find(p => p.id === panelId);
-      if (panel) {
-        panel.bomRows     = rows;
-        panel.meta        = meta;
-        panel.parseErrors = errors;
-        panel.sourceType  = 'mmd';
-        panel.filename    = file.name;
-      }
+      const errors         = [];
+      const { meta, rows } = spec.parse(e.target.result, errors);
+      const panel          = panels.find(p => p.id === panelId);
+      if (panel) Object.assign(panel, { bomRows: rows, meta, parseErrors: errors, sourceType: spec.sourceType, filename: file.name });
       runComparison();
     };
     reader.readAsText(file);
@@ -750,13 +731,30 @@ function initBomImport() {
 }
 
 // --------------------------------------------------------------------------
-// showMappingModal(allRows)
-// Stores all rows from the file and opens the column-mapping modal.
-// The user picks which row contains the headers via the number input;
-// repopulateMappingTable() rebuilds the column table whenever that changes.
+// showMappingModal(allRows, panelId, filename)
+// Opens the column-mapping modal. Captures panelId and filename in the
+// _pendingConfirm closure so confirmMapping() needs no extra globals.
 // --------------------------------------------------------------------------
-function showMappingModal(allRows) {
+function showMappingModal(allRows, panelId, filename) {
   _pendingAllRows = allRows;
+  _pendingConfirm = () => {
+    // Build colIndex → role mapping from the dropdown selections
+    const mapping = {};
+    document.querySelectorAll('.modal-role-select').forEach(sel => {
+      mapping[parseInt(sel.dataset.col, 10)] = sel.value;
+    });
+    // Data rows are everything after the selected header row
+    const headerRowIdx = Math.max(0, parseInt(document.getElementById('bom-header-row').value, 10) - 1);
+    const dataRows     = allRows.slice(headerRowIdx + 1);
+    const panel        = panels.find(p => p.id === panelId);
+    if (panel) {
+      panel.bomRows    = buildBomRows(dataRows, mapping);
+      panel.sourceType = 'bom';
+      panel.filename   = filename;
+    }
+    closeMappingModal();
+    runComparison();
+  };
 
   const headerRowInput = document.getElementById('bom-header-row');
   headerRowInput.max   = allRows.length;
@@ -796,37 +794,12 @@ function repopulateMappingTable(headerRowIdx) {
 
 function closeMappingModal() {
   document.getElementById('bom-modal').setAttribute('hidden', '');
-  _pendingAllRows  = null;
-  _pendingPanelId  = null;
-  _pendingFilename = null;
+  _pendingAllRows = null;
+  _pendingConfirm = null;
 }
 
-// --------------------------------------------------------------------------
-// confirmMapping()
-// Reads role assignments from the modal dropdowns, builds rows, and stores
-// them on the target panel.
-// --------------------------------------------------------------------------
 function confirmMapping() {
-  // Build colIndex → role mapping from the dropdown selections
-  const mapping = {};
-  document.querySelectorAll('.modal-role-select').forEach(sel => {
-    mapping[parseInt(sel.dataset.col, 10)] = sel.value;
-  });
-
-  // Data rows are everything after the selected header row
-  const headerRowIdx = Math.max(0, parseInt(document.getElementById('bom-header-row').value, 10) - 1);
-  const dataRows     = _pendingAllRows.slice(headerRowIdx + 1);
-
-  // Build typed BOM rows and store on the target panel
-  const panel = panels.find(p => p.id === _pendingPanelId);
-  if (panel) {
-    panel.bomRows    = buildBomRows(dataRows, mapping);
-    panel.sourceType = 'bom';
-    panel.filename   = _pendingFilename;
-  }
-
-  closeMappingModal();
-  runComparison();
+  if (_pendingConfirm) _pendingConfirm();
 }
 
 // --------------------------------------------------------------------------
