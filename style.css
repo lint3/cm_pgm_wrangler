@@ -63,19 +63,9 @@ header {
 
 header h1 { font-size: 1.1rem; }
 
-.h1-hover { display: none; }
-header h1:hover .h1-default { display: none; }
-header h1:hover .h1-hover   { display: inline; }
-
-
-
 /* -------------------------------------------------------------------------
-   Small-caps label — shared by footer counts, diff count, table headers,
-   and error trigger
+   Small-caps label — used by modal table headers
 ------------------------------------------------------------------------- */
-.footer-label,
-.header-count,
-.footer-errors,
 #modal-mapping-table th {
   font-size: 10px;
   font-weight: 700;
@@ -102,51 +92,12 @@ header h1:hover .h1-hover   { display: inline; }
   background: #fff5f5;
 }
 
-/* Panel icon buttons (×, ⌫, ⇄): symbol characters, larger than text buttons */
-.btn-panel-icon {
-  font-size: 14px;
-  line-height: 1;
-  padding: 0 4px;
-}
-
-/* Push the ⌫ + ⇄ pair to the right of the type row */
-.btn-clear-input { margin-left: auto; }
-
-
-/* Copy button: text label, compact */
-.btn-copy {
-  font-size: 11px;
-}
-.btn-copy:disabled { cursor: default; }
-
-/* Positioned in the top-right corner of the parsed output wrapper */
-.btn-copy-parsed {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-}
-
 /* Clear all: solid background, hover tint, armed (confirm) state */
 .btn-clear {
   font-size: 11px;
   background: #fafafa;
 }
-.btn-clear-armed,
-.btn-clear-armed:hover { opacity: 1; border-color: #c00; color: #fff; background: #c00; }
-
-/* -------------------------------------------------------------------------
-   Output areas: parsed output boxes
-------------------------------------------------------------------------- */
-.output-area {
-  font-size: 12px;
-  background: hsla(228, 10%, 85%, 0.5);
-  border: 1px solid #d0d3da;
-  border-radius: 2px;
-  color: #333;
-  line-height: 1.4;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
+.btn-clear-armed { opacity: 1; border-color: #c00; color: #fff; background: #c00; }
 
 /* -------------------------------------------------------------------------
    Config bar
@@ -172,208 +123,8 @@ header h1:hover .h1-hover   { display: inline; }
   padding-left: 1rem;
 }
 
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  user-select: none;
-}
-.checkbox-label:has(input:disabled) { color: #aaa; }
-
-/* Delimiter input with space-visualising overlay */
-.delimiter-wrapper {
-  position: relative;
-  display: inline-block; /* shrink-wrap around the input */
-}
-#txt-delimiter { padding-left: 1px; }
-
-.delimiter-preview {
-  position: absolute;
-  inset: 1px;           /* sit just inside the input's border */
-  padding: 0px 4px 0px 1px; /* 0 top padding nudges text up to match input's rendering */
-  font-size: 12px;
-  background: #fafafa;
-  pointer-events: none; /* clicks fall through to the input beneath */
-  white-space: pre;     /* preserve spacing layout */
-}
-/* Hide the preview while the input is focused */
-#txt-delimiter:focus + .delimiter-preview { display: none; }
-
-
-/* Load BOM button: solid background, hover darkens border */
-#btn-load-bom {
-  font-size: 11px;
-  background: #fafafa;
-}
-#btn-load-bom:hover {
-  background: #ebebeb;
-  border-color: #888;
-}
-
-/* Drag-over state: pulsing ring to draw attention without overlaying the page */
-#btn-load-bom.drag-active {
-  border-color: #2a8;
-  background: #eaf8f1;
-  color: #1a6;
-  animation: bom-beacon 0.65s ease-out infinite;
-}
-
-@keyframes bom-beacon {
-  0%   { box-shadow: 0 0 0 0px rgba(34, 170, 100, 0.7); }
-  100% { box-shadow: 0 0 0 10px rgba(34, 170, 100, 0); }
-}
-
 /* -------------------------------------------------------------------------
-   Panel area
-------------------------------------------------------------------------- */
-#panel-area {
-  display: flex;
-  gap: 0.5rem;
-  align-items: stretch;
-}
-
-#panel-container {
-  display: flex;
-  flex: 1;
-  gap: 0.5rem;
-  align-items: flex-start;
-}
-
-#btn-add-panel {
-  flex-shrink: 0;
-  width: 24px;
-  background: #fff;
-  border: 1px dashed #bbb;
-  border-radius: 3px;
-  color: #aaa;
-  font-size: 18px;
-  padding: 0;
-}
-#btn-add-panel:hover {
-  background: #ebebeb;
-  border-color: #888;
-  color: #444;
-}
-
-.panel {
-  flex: 1;
-  min-width: 240px;
-  background: #fff;
-  border: 1px solid #ccc;
-  border-radius: 3px;
-  padding: 0.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-input.panel-label {
-  font-size: 0.85rem;
-  font-weight: 700;
-  flex: 1;
-  min-width: 0;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 2px;
-  padding: 2px;
-  color: inherit;
-  margin-right: 5px;
-}
-input.panel-label:hover { outline: none; border-color: #d0d3da; }
-
-.sub-area {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-
-.parsed-output-wrapper { position: relative; }
-
-.parsed-output {
-  min-height: 60px;
-  padding: 0.35rem;
-  padding-right: 2.5rem; /* room for the copy button */
-}
-
-.panel-footer {
-  display: flex;
-  justify-content: flex-end;
-}
-
-/* -------------------------------------------------------------------------
-   Token diff status spans (rendered inside .parsed-output)
-   status-all:     in every panel — no highlight, normal text
-   status-unique:  only in this panel — red tint
-   status-partial: in some but not all panels — amber tint (3+ panel diffs)
-------------------------------------------------------------------------- */
-.token {
-  border-radius: 2px;
-  padding: 0 1px;
-  white-space: nowrap;
-}
-
-.status-unique  { background: #fbb; }
-.status-partial { background: #fef3c7; }
-
-/* Partially-fulfilled output token: present in BOM but not all contributors were in input */
-.partial-token  { border: 2px dotted #0004; }
-
-/* -------------------------------------------------------------------------
-   Per-panel type row: [input type] → [output type]  [⌫] [⇄]
-------------------------------------------------------------------------- */
-.panel-type-row {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.panel-input-type,
-.panel-output-type {
-  font-size: 11px;
-  padding: 1px 3px;
-}
-
-.type-arrow {
-  color: #888;
-  font-size: 12px;
-  flex-shrink: 0;
-  user-select: none;
-}
-
-/* -------------------------------------------------------------------------
-   Error expando (panel footer)
-------------------------------------------------------------------------- */
-
-/* footer-errors uses the shared small-caps style; these are its unique props */
-.footer-errors {
-  margin-right: auto;
-  color: #c00; /* overrides the #777 from the shared rule */
-  cursor: pointer;
-  user-select: none;
-}
-
-/* Hide when empty so the footer layout is unchanged with no errors */
-.footer-errors:empty { display: none; }
-
-.error-detail {
-  font-size: 11px;
-  padding: 0.25rem 0.4rem;
-  background: #fff5f5;
-  border: 1px solid #fbb;
-  border-radius: 2px;
-  word-break: break-word;
-  color: #a00;
-}
-
-/* -------------------------------------------------------------------------
-   Modal (BOM column mapping + help)
+   Modal (BOM column mapping)
 ------------------------------------------------------------------------- */
 .modal-overlay {
   position: fixed;
@@ -486,34 +237,8 @@ input.panel-label:hover { outline: none; border-color: #d0d3da; }
 
 
 /* -------------------------------------------------------------------------
-   Panel source type dropdown
+   Browse button + drop zone labels
 ------------------------------------------------------------------------- */
-.panel-source-type {
-  width: 100%;
-  font-size: 12px;
-  padding: 2px 4px;
-}
-
-/* -------------------------------------------------------------------------
-   Drop zone: browse button + drag-and-drop area
-------------------------------------------------------------------------- */
-.drop-zone {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.3rem 0.4rem;
-  border: 1px dashed #ccc;
-  border-radius: 3px;
-  background: #fafafa;
-  min-height: 32px;
-  flex-wrap: wrap;
-}
-
-.drop-zone.drag-over {
-  border-color: #2a8;
-  background: #eaf8f1;
-}
-
 .btn-browse {
   font-size: 11px;
   background: #fff;
@@ -529,15 +254,6 @@ input.panel-label:hover { outline: none; border-color: #d0d3da; }
   color: #aaa;
   pointer-events: none; /* don't intercept drag events from parent */
   user-select: none;
-}
-
-.drop-zone-filename {
-  font-size: 11px;
-  color: #555;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  pointer-events: none;
 }
 
 /* -------------------------------------------------------------------------
@@ -582,19 +298,6 @@ input.panel-label:hover { outline: none; border-color: #d0d3da; }
 
 .drop-zone-landing .drop-zone-label {
   font-size: 12px;
-}
-
-/* -------------------------------------------------------------------------
-   Panel footer — error trigger | View Full Table | item count
-------------------------------------------------------------------------- */
-.btn-view-table {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #555;
-  margin-left: auto;
-  margin-right: 0.5rem;
 }
 
 /* -------------------------------------------------------------------------

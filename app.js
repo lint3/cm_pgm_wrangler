@@ -1,4 +1,4 @@
-// Partser — app.js
+// Program Wrangler — app.js
 
 // --------------------------------------------------------------------------
 // Panel state
@@ -8,8 +8,8 @@
 const PANEL_IDS = ['a', 'b', 'c', 'd']; // max 4 panels, fixed slot order
 
 const panels = [
-  { id: 'a', label: 'Panel A', tokens: [], sourceType: 'file', bomRows: [], parseErrors: [] },
-  { id: 'b', label: 'Panel B', tokens: [], sourceType: 'file', bomRows: [], parseErrors: [] },
+  { id: 'a', label: 'Panel A', sourceType: 'file', bomRows: [], parseErrors: [] },
+  { id: 'b', label: 'Panel B', sourceType: 'file', bomRows: [], parseErrors: [] },
 ];
 
 // --------------------------------------------------------------------------
@@ -50,7 +50,7 @@ function addPanel() {
   if (panels.length >= 4) return;
   const usedIds = new Set(panels.map(p => p.id));
   const id      = PANEL_IDS.find(s => !usedIds.has(s));
-  panels.push({ id, label: 'Panel ' + id.toUpperCase(), tokens: [], sourceType: 'file', bomRows: [], parseErrors: [] });
+  panels.push({ id, label: 'Panel ' + id.toUpperCase(), sourceType: 'file', bomRows: [], parseErrors: [] });
   runComparison();
 }
 
@@ -513,8 +513,8 @@ function renderComparison(compRows, panels) {
 
   btnExpandAll.removeAttribute('hidden');
   btnCollapseAll.removeAttribute('hidden');
-  btnExpandAll.onclick   = () => setAllExpanded(true);
-  btnCollapseAll.onclick = () => setAllExpanded(false);
+  btnExpandAll.addEventListener('click',   () => setAllExpanded(true));
+  btnCollapseAll.addEventListener('click', () => setAllExpanded(false));
 }
 
 // --------------------------------------------------------------------------
@@ -681,9 +681,8 @@ let _pendingFilename = null;
 
 // --------------------------------------------------------------------------
 // handleBomFile(file, panelId)
-// Reads a File object and opens the column-mapping modal for the given panel.
-// TODO: rewrite for new app — add panelId param; store result in panel.bomRows
-//   instead of global bom; will eventually dispatch to CSV/XML parsers too.
+// Reads a File object and dispatches to the appropriate parser.
+// XLSX files open the column-mapping modal; ISS and MMD are parsed directly.
 // --------------------------------------------------------------------------
 function handleBomFile(file, panelId) {
   const ext = file.name.split('.').pop().toLowerCase();
@@ -737,8 +736,6 @@ function handleBomFile(file, panelId) {
   }
 }
 
-// TODO: rewrite for new app — file import moves to per-panel (triggered by buttons
-//   rendered in renderPanels). Keep drag-and-drop pattern and modal wiring.
 function initBomImport() {
   // Wire mapping modal close/cancel/confirm — these buttons live in static HTML
   document.getElementById('bom-header-row').addEventListener('change', e => {
@@ -808,8 +805,6 @@ function closeMappingModal() {
 // confirmMapping()
 // Reads role assignments from the modal dropdowns, builds rows, and stores
 // them on the target panel.
-// TODO: rewrite for new app — store result in panel.bomRows (by panelId)
-//   instead of global bom; update panel source badge; call runComparison().
 // --------------------------------------------------------------------------
 function confirmMapping() {
   // Build colIndex → role mapping from the dropdown selections
@@ -870,25 +865,11 @@ function buildBomRows(rawRows, mapping) {
 }
 
 // --------------------------------------------------------------------------
-// Session persistence
-// Saves panels (data only) and config to sessionStorage on every
-// runComparison(), and restores them at startup. DOM refs on panel objects
-// (parsedEl, footerEl, etc.) are excluded — they're set by renderPanels().
-// TODO: rewrite for new app — panel shape changes (sourceType, bomRows instead
-//   of raw/inputType/outputType); config shape changes (comparisonField).
+// Session persistence — not yet implemented
 // --------------------------------------------------------------------------
-const SESSION_KEY = 'partser_state';
-
-function saveState() {
-  // TODO: rewrite for new app
-}
-
-function loadState() {
-  // TODO: rewrite for new app
-}
+function loadState() {}
 
 function clearState() {
-  // TODO: rewrite for new app
   syncConfigBarUI();
   runComparison();
 }
