@@ -2,15 +2,14 @@
 
 // --------------------------------------------------------------------------
 // Panel state
-// Panels are objects with id, label, tokens[], and raw text.
-// Adding/removing panels means mutating this array, then calling
-// renderPanels() + runComparison().
+// Panels are objects with id, label, sourceType, bomRows[], and parseErrors[].
+// Adding/removing panels means mutating this array, then calling runComparison().
 // --------------------------------------------------------------------------
 const PANEL_IDS = ['a', 'b', 'c', 'd']; // max 4 panels, fixed slot order
 
 const panels = [
-  { id: 'a', label: 'Panel A', tokens: [], sourceType: 'text', bomRows: [], parseErrors: [], raw: '', interpretAs: 'refdes' },
-  { id: 'b', label: 'Panel B', tokens: [], sourceType: 'text', bomRows: [], parseErrors: [], raw: '', interpretAs: 'refdes' },
+  { id: 'a', label: 'Panel A', tokens: [], sourceType: 'file', bomRows: [], parseErrors: [] },
+  { id: 'b', label: 'Panel B', tokens: [], sourceType: 'file', bomRows: [], parseErrors: [] },
 ];
 
 // --------------------------------------------------------------------------
@@ -45,186 +44,19 @@ function syncConfigBarUI() {
 }
 
 // --------------------------------------------------------------------------
-// Panel rendering
-// Rebuilds panel DOM from the panels array. Each panel contains:
-//   - Editable label + delete button
-//   - Source type dropdown (Textbox / Juki / BOM / MMD)
-//   - Browse button + per-panel drag-and-drop zone (always visible)
-//   - Textarea + interpret-as dropdown (only when sourceType === 'text')
-//   - Parsed output area with copy button
-//   - Footer: error expando trigger, View Full Table button, item count
-// Stores element refs (parsedEl, footerEl, errorTriggerEl, errorDetailEl) on
-// each panel object so runComparison() can update them without re-querying.
-// --------------------------------------------------------------------------
-
-function renderPanels() {
-  const container = document.getElementById('panel-container');
-  container.innerHTML = '';
-
-  for (const panel of panels) {
-    const col = document.createElement('div');
-    col.className = 'panel';
-    col.dataset.panelId = panel.id;
-
-    col.innerHTML = `
-      <div class="panel-header">
-        <input type="text" class="panel-label" value="${escAttr(panel.label)}">
-        <button class="btn-fade btn-panel-icon btn-danger btn-delete-panel" tabindex="-1" title="Remove panel">×</button>
-      </div>
-
-      <div class="drop-zone">
-        <input type="file" class="file-input-hidden" accept=".xlsx,.iss,.mmd" hidden>
-        <button class="btn-browse" tabindex="-1">Browse</button>
-        <span class="drop-zone-label">or drag &amp; drop a file</span>
-        <span class="drop-zone-filename"></span>
-      </div>
-
-      <div class="text-input-area">
-        <textarea class="raw-input" placeholder="Paste list here..."></textarea>
-        <div class="identifier-row">
-          <span class="identifier-label">Interpret as</span>
-          <select class="panel-interpret-as" tabindex="-1">
-            <option value="refdes"${panel.interpretAs === 'refdes' ? ' selected' : ''}>Refdes</option>
-            <option value="fn"${panel.interpretAs === 'fn' ? ' selected' : ''}>FN</option>
-            <option value="ipn"${panel.interpretAs === 'ipn' ? ' selected' : ''}>IPN</option>
-            <option value="mpn"${panel.interpretAs === 'mpn' ? ' selected' : ''}>MPN</option>
-            <option value="cpn"${panel.interpretAs === 'cpn' ? ' selected' : ''}>CPN</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="panel-footer">
-        <span class="footer-errors"></span>
-        <button class="btn-fade btn-view-table" tabindex="-1">View Full Table</button>
-        <span class="footer-label">0 items</span>
-      </div>
-      <div class="error-detail" hidden></div>
-    `;
-
-    // Store element refs for use in runComparison() and renderErrorExpando()
-    panel.footerEl       = col.querySelector('.footer-label');
-    panel.errorTriggerEl = col.querySelector('.footer-errors');
-    panel.errorDetailEl  = col.querySelector('.error-detail');
-
-    // Editable label
-    const labelInput = col.querySelector('.panel-label');
-    labelInput.addEventListener('input', () => { panel.label = labelInput.value; saveState(); });
-    labelInput.addEventListener('focus', () => labelInput.select());
-
-    // Browse button → hidden file input
-    const fileInput = col.querySelector('.file-input-hidden');
-    col.querySelector('.btn-browse').addEventListener('click', () => fileInput.click());
-
-    // File input: load file, clear any textbox text
-    fileInput.addEventListener('change', e => {
-      const file = e.target.files[0];
-      if (!file) return;
-      fileInput.value = ''; // allow re-selecting the same file later
-      col.querySelector('.drop-zone-filename').textContent = file.name;
-      col.querySelector('.raw-input').value = '';
-      panel.raw = '';
-      handleBomFile(file, panel.id);
-    });
-
-    // Per-panel drag-and-drop onto the drop zone.
-    // relatedTarget check avoids flicker when cursor crosses child element boundaries.
-    const dropZone = col.querySelector('.drop-zone');
-    dropZone.addEventListener('dragenter', e => {
-      if (!e.dataTransfer.types.includes('Files')) return;
-      e.preventDefault();
-      dropZone.classList.add('drag-over');
-    });
-    dropZone.addEventListener('dragleave', e => {
-      if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('drag-over');
-    });
-    dropZone.addEventListener('dragover', e => {
-      if (!e.dataTransfer.types.includes('Files')) return;
-      e.preventDefault();
-    });
-    dropZone.addEventListener('drop', e => {
-      e.preventDefault();
-      dropZone.classList.remove('drag-over');
-      const file = e.dataTransfer.files[0];
-      if (!file) return;
-      col.querySelector('.drop-zone-filename').textContent = file.name;
-      col.querySelector('.raw-input').value = '';
-      panel.raw = '';
-      handleBomFile(file, panel.id);
-    });
-
-    // Textarea: update panel.raw, clear any loaded file data
-    const textarea = col.querySelector('.raw-input');
-    textarea.value = panel.raw || '';
-    textarea.addEventListener('input', () => {
-      panel.raw = textarea.value;
-      col.querySelector('.drop-zone-filename').textContent = '';
-      panel.bomRows = [];
-      runComparison();
-    });
-
-    // Interpret-as dropdown
-    col.querySelector('.panel-interpret-as').addEventListener('change', e => {
-      panel.interpretAs = e.target.value;
-      runComparison();
-    });
-
-    // Error expando: toggle detail div visibility on click
-    panel.errorTriggerEl.addEventListener('click', () => {
-      if (panel.errorDetailEl.hasAttribute('hidden')) {
-        panel.errorDetailEl.removeAttribute('hidden');
-      } else {
-        panel.errorDetailEl.setAttribute('hidden', '');
-      }
-      renderErrorExpando(panel); // refresh ▶/▼ indicator
-    });
-
-    // View Full Table button
-    col.querySelector('.btn-view-table').addEventListener('click', () => openTableModal(panel));
-
-    // Delete button: disabled when only 1 panel remains
-    const deleteBtn = col.querySelector('.btn-delete-panel');
-    deleteBtn.disabled = panels.length <= 1;
-    deleteBtn.addEventListener('click', () => deletePanel(panel.id));
-
-    container.appendChild(col);
-  }
-
-  // Add button: disabled at the 4-panel cap
-  document.getElementById('btn-add-panel').disabled = panels.length >= 4;
-}
-
-// --------------------------------------------------------------------------
 // addPanel() / deletePanel(id)
 // --------------------------------------------------------------------------
 function addPanel() {
   if (panels.length >= 4) return;
   const usedIds = new Set(panels.map(p => p.id));
   const id      = PANEL_IDS.find(s => !usedIds.has(s));
-  panels.push({ id, label: 'Panel ' + id.toUpperCase(), tokens: [], sourceType: 'text', bomRows: [], parseErrors: [], raw: '', interpretAs: 'refdes' });
-  renderPanels();
+  panels.push({ id, label: 'Panel ' + id.toUpperCase(), tokens: [], sourceType: 'file', bomRows: [], parseErrors: [] });
   runComparison();
 }
 
 function deletePanel(id) {
-  if (panels.length <= 1) return;
   panels.splice(panels.findIndex(p => p.id === id), 1);
-  renderPanels();
   runComparison();
-}
-
-// --------------------------------------------------------------------------
-// parseInputTokens(rawText)
-// Splits freeform text into uppercase IPN tokens.
-// Strips // and # comments, then splits on whitespace/commas/semicolons.
-// IPNs are never ranges, so no range expansion is applied.
-// --------------------------------------------------------------------------
-function parseInputTokens(rawText) {
-  return rawText
-    .replace(/\/\/.*$/gm, '')  // strip // comments
-    .replace(/#.*$/gm,    '')  // strip # comments
-    .split(/[\s,;]+/)
-    .map(t => t.trim().toUpperCase())
-    .filter(t => t.length > 0);
 }
 
 // --------------------------------------------------------------------------
@@ -232,22 +64,12 @@ function parseInputTokens(rawText) {
 // Builds a two-level index for one panel:
 //   Map<IPN, { attributes: {fn,cpn,mpn,description}, refdes: Map<Refdes, {x,y,angle,skip,package}> }>
 //
-// For file panels (bom/juki/mmd): iterates bomRows, grouping by IPN.
+// Iterates bomRows, grouping by IPN.
 //   XLSX BOM rows have multiple refdes but no coords.
 //   Juki/MMD rows have one refdes with coords.
-// For text panels: each token becomes an IPN with empty attributes and no refdes.
 // --------------------------------------------------------------------------
 function buildPanelData(panel) {
   const result = new Map();
-
-  if (panel.sourceType === 'text') {
-    for (const token of parseInputTokens(panel.raw)) {
-      if (!result.has(token)) {
-        result.set(token, { attributes: {}, refdes: new Map() });
-      }
-    }
-    return result;
-  }
 
   // bom / juki / mmd
   for (const row of (panel.bomRows || [])) {
@@ -570,8 +392,15 @@ function renderComparison(compRows, panels) {
   // Non-match rows auto-expand in any non-'all' mode
   const autoExpandDiff = config.viewMode !== 'all';
 
-  // Build table header
-  const panelHeaders = panels.map(p => `<th>${escAttr(p.label)}</th>`).join('');
+  // Build table header — editable label input + filename below
+  const panelHeaders = panels.map(p => `
+    <th class="col-panel-header">
+      <div class="col-label-row">
+        <input type="text" class="col-label-input" value="${escAttr(p.label)}" data-panel-id="${escAttr(p.id)}">
+        <button class="btn-fade btn-danger btn-remove-col" data-panel-id="${escAttr(p.id)}" title="Remove">×</button>
+      </div>
+      <span class="col-filename">${escAttr(p.filename || '')}</span>
+    </th>`).join('');
   let html = `<table class="comparison-table${tableClass}">`;
   html += `<thead><tr><th class="col-key">IPN</th>${panelHeaders}</tr></thead><tbody>`;
 
@@ -635,8 +464,19 @@ function renderComparison(compRows, panels) {
   html += '</tbody></table>';
   body.innerHTML = html;
 
-  // Wire per-row expand/collapse toggle buttons
+  // Wire column label inputs and remove buttons
   const table = body.querySelector('.comparison-table');
+  table.querySelectorAll('.col-label-input').forEach(input => {
+    const panel = panels.find(p => p.id === input.dataset.panelId);
+    input.addEventListener('input', () => { if (panel) panel.label = input.value; });
+    input.addEventListener('focus', () => input.select());
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+  });
+  table.querySelectorAll('.btn-remove-col').forEach(btn => {
+    btn.addEventListener('click', () => deletePanel(btn.dataset.panelId));
+  });
+
+  // Wire per-row expand/collapse toggle buttons
   table.querySelectorAll('.btn-expand').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
@@ -680,77 +520,116 @@ function renderComparison(compRows, panels) {
 // --------------------------------------------------------------------------
 // runComparison()
 // Builds per-panel data indexes, computes comparison rows, renders the
-// comparison table, and updates panel footer item counts.
+// comparison table. Uses only panels that have data loaded.
 // --------------------------------------------------------------------------
 function runComparison() {
-  // Rebuild per-panel data indexes
-  const panelData = panels.map(buildPanelData);
-
-  // Update each panel's footer count and error expando
-  panels.forEach((panel, i) => {
-    if (panel.footerEl) {
-      panel.footerEl.textContent = panelData[i].size + ' items';
-    }
-    if (panel.errorTriggerEl) renderErrorExpando(panel);
-  });
-
-  // Need at least 2 panels with any data to show a comparison
+  const panelData    = panels.map(buildPanelData);
   const activePanels = panels.filter((_, i) => panelData[i].size > 0);
-  if (activePanels.length < 2) {
-    const body    = document.getElementById('comparison-body');
-    const countEl = document.getElementById('comparison-count');
-    if (body)    body.innerHTML = '<p class="comparison-empty">Load data into at least two panels to compare.</p>';
-    if (countEl) countEl.textContent = '';
-    document.getElementById('btn-expand-all').setAttribute('hidden', '');
-    document.getElementById('btn-collapse-all').setAttribute('hidden', '');
+  const activeData   = activePanels.map(p => panelData[panels.indexOf(p)]);
+
+  if (activePanels.length === 0) {
+    renderLandingZone();
     return;
   }
 
-  // Union of all IPNs across all panels, natural-sorted
+  // Union of all IPNs across active panels, natural-sorted
   const allIPNsSet = new Set();
-  for (const pd of panelData) pd.forEach((_, ipn) => allIPNsSet.add(ipn));
+  for (const pd of activeData) pd.forEach((_, ipn) => allIPNsSet.add(ipn));
   const allIPNs = [...allIPNsSet].sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
 
   // Build one comparison row per IPN, then collapse complementary IPN-change pairs
-  const rawRows  = allIPNs.map(ipn => computeIpnRow(ipn, panelData, panels));
-  const compRows = postProcessIpnChanges(rawRows, panels);
+  const rawRows  = allIPNs.map(ipn => computeIpnRow(ipn, activeData, activePanels));
+  const compRows = postProcessIpnChanges(rawRows, activePanels);
 
-  renderComparison(compRows, panels);
+  renderComparison(compRows, activePanels);
 }
 
+// --------------------------------------------------------------------------
+// renderLandingZone()
+// Renders a Browse button prompt into #comparison-body when no files are
+// loaded. Drag-and-drop is handled page-wide by initPageDropZone().
+// --------------------------------------------------------------------------
+function renderLandingZone() {
+  const body    = document.getElementById('comparison-body');
+  const countEl = document.getElementById('comparison-count');
+  countEl.textContent = '';
+  document.getElementById('btn-expand-all').setAttribute('hidden', '');
+  document.getElementById('btn-collapse-all').setAttribute('hidden', '');
+
+  body.innerHTML = `
+    <div class="drop-zone-landing">
+      <input type="file" class="file-input-landing" accept=".xlsx,.iss,.mmd" hidden>
+      <button class="btn-browse btn-browse-landing">Browse</button>
+      <span class="drop-zone-label">or drag a file anywhere on the page</span>
+    </div>
+  `;
+
+  const fileInput = body.querySelector('.file-input-landing');
+  body.querySelector('.btn-browse-landing').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    fileInput.value = '';
+    handleBomFile(file, getDropTargetPanelId());
+  });
+}
 
 // --------------------------------------------------------------------------
-// renderErrorExpando(panel)
-// Updates the error expando in the panel footer.
-// Combines parse errors (bad input format) and BOM resolution failures into
-// one list. Each entry is a human-readable line item.
-// The click handler (wired in renderPanels) toggles the detail visibility;
-// this function only refreshes the text content of both elements.
+// getDropTargetPanelId()
+// Returns the id of a panel to load a dropped file into:
+//   - The first panel with no data loaded, if any.
+//   - A newly created panel, if under the 4-panel cap.
+//   - null if all panels are full.
 // --------------------------------------------------------------------------
-function renderErrorExpando(panel) {
-  const allErrors = panel.parseErrors || [];
-
-  if (allErrors.length === 0) {
-    panel.errorTriggerEl.textContent = '';
-    panel.errorDetailEl.setAttribute('hidden', '');
-    return;
+function getDropTargetPanelId() {
+  const empty = panels.find(p => !p.bomRows || p.bomRows.length === 0);
+  if (empty) return empty.id;
+  if (panels.length < 4) {
+    addPanel();
+    return panels[panels.length - 1].id;
   }
-
-  const open = !panel.errorDetailEl.hasAttribute('hidden');
-  panel.errorTriggerEl.textContent = `${allErrors.length} error${allErrors.length !== 1 ? 's' : ''} ${open ? '▼' : '▶'}`;
-  panel.errorDetailEl.innerHTML    = allErrors.map(e => `<div>${e}</div>`).join('');
+  return null;
 }
 
+// --------------------------------------------------------------------------
+// initPageDropZone()
+// Makes the entire viewport a persistent drag-and-drop target.
+// Shows a fixed overlay ring while a file is being dragged over the page.
+// On drop, routes the file to the next available panel slot.
+// --------------------------------------------------------------------------
+function initPageDropZone() {
+  const overlay = document.getElementById('drop-overlay');
+  // dragCounter tracks nested dragenter/dragleave pairs so the overlay only
+  // hides when the drag truly leaves the window (not just crosses child elements).
+  let dragCounter = 0;
 
-// --------------------------------------------------------------------------
-// updateRangeToggleState()
-// Range output is only meaningful for Refdes and FN comparison fields.
-// TODO: rewrite for new app — check config.comparisonField instead of per-panel types.
-// --------------------------------------------------------------------------
-function updateRangeToggleState() {
-  // TODO: rewrite for new app
+  document.addEventListener('dragenter', e => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    dragCounter++;
+    overlay.removeAttribute('hidden');
+  });
+
+  document.addEventListener('dragleave', () => {
+    dragCounter--;
+    if (dragCounter === 0) overlay.setAttribute('hidden', '');
+  });
+
+  document.addEventListener('dragover', e => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+  });
+
+  document.addEventListener('drop', e => {
+    e.preventDefault();
+    dragCounter = 0;
+    overlay.setAttribute('hidden', '');
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const panelId = getDropTargetPanelId();
+    if (panelId) handleBomFile(file, panelId);
+  });
 }
-
 
 
 
@@ -798,6 +677,7 @@ const ROLE_OPTIONS = [
 // All raw rows from the file (not pre-split); header row is chosen by the user.
 let _pendingAllRows  = null;
 let _pendingPanelId  = null;
+let _pendingFilename = null;
 
 // --------------------------------------------------------------------------
 // handleBomFile(file, panelId)
@@ -815,7 +695,8 @@ function handleBomFile(file, panelId) {
       const sheet    = workbook.Sheets[workbook.SheetNames[0]];
       // header:1 gives array-of-arrays; defval:'' keeps empty cells in place
       const allRows  = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-      _pendingPanelId = panelId;
+      _pendingPanelId  = panelId;
+      _pendingFilename = file.name;
       showMappingModal(allRows);
     };
     reader.readAsArrayBuffer(file);
@@ -831,6 +712,7 @@ function handleBomFile(file, panelId) {
         panel.meta        = meta;
         panel.parseErrors = errors;
         panel.sourceType  = 'juki';
+        panel.filename    = file.name;
       }
       runComparison();
     };
@@ -847,6 +729,7 @@ function handleBomFile(file, panelId) {
         panel.meta        = meta;
         panel.parseErrors = errors;
         panel.sourceType  = 'mmd';
+        panel.filename    = file.name;
       }
       runComparison();
     };
@@ -916,8 +799,9 @@ function repopulateMappingTable(headerRowIdx) {
 
 function closeMappingModal() {
   document.getElementById('bom-modal').setAttribute('hidden', '');
-  _pendingAllRows = null;
-  _pendingPanelId = null;
+  _pendingAllRows  = null;
+  _pendingPanelId  = null;
+  _pendingFilename = null;
 }
 
 // --------------------------------------------------------------------------
@@ -943,6 +827,7 @@ function confirmMapping() {
   if (panel) {
     panel.bomRows    = buildBomRows(dataRows, mapping);
     panel.sourceType = 'bom';
+    panel.filename   = _pendingFilename;
   }
 
   closeMappingModal();
@@ -985,15 +870,6 @@ function buildBomRows(rawRows, mapping) {
 }
 
 // --------------------------------------------------------------------------
-// updateBomStatus()
-// TODO: rewrite for new app — status moves to per-panel source badge
-//   rendered by renderPanels(); this function can be removed.
-// --------------------------------------------------------------------------
-function updateBomStatus() {
-  // TODO: rewrite for new app
-}
-
-// --------------------------------------------------------------------------
 // Session persistence
 // Saves panels (data only) and config to sessionStorage on every
 // runComparison(), and restores them at startup. DOM refs on panel objects
@@ -1014,7 +890,6 @@ function loadState() {
 function clearState() {
   // TODO: rewrite for new app
   syncConfigBarUI();
-  renderPanels();
   runComparison();
 }
 
@@ -1082,25 +957,6 @@ function initTableModal() {
   });
 }
 
-// --------------------------------------------------------------------------
-// Help modal
-// --------------------------------------------------------------------------
-function initHelpModal() {
-  const modal = document.getElementById('help-modal');
-
-  document.getElementById('btn-help').addEventListener('click', () => {
-    modal.removeAttribute('hidden');
-  });
-
-  document.getElementById('btn-help-close').addEventListener('click', () => {
-    modal.setAttribute('hidden', '');
-  });
-
-  // Close when clicking the backdrop (outside the modal box)
-  modal.addEventListener('click', e => {
-    if (e.target === modal) modal.setAttribute('hidden', '');
-  });
-}
 
 // --------------------------------------------------------------------------
 // Init
@@ -1110,10 +966,18 @@ initConfigBar();
 syncConfigBarUI();
 initBomImport();
 initTableModal();
-initHelpModal();
-renderPanels();
+initPageDropZone();
 runComparison();
-document.getElementById('btn-add-panel').addEventListener('click', addPanel);
+
+const _addFileInput = document.getElementById('file-input-add');
+document.getElementById('btn-add-file').addEventListener('click', () => _addFileInput.click());
+_addFileInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  _addFileInput.value = '';
+  const panelId = getDropTargetPanelId();
+  if (panelId) handleBomFile(file, panelId);
+});
 // Two-click confirmation: first click arms the button; second click within
 // 2 seconds executes. Clicking elsewhere or waiting resets it.
 (function () {

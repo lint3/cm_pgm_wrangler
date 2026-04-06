@@ -68,23 +68,14 @@ header h1:hover .h1-default { display: none; }
 header h1:hover .h1-hover   { display: inline; }
 
 
-/* Absolute so it doesn't shift the centered h1 */
-.btn-help-trigger {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  border-radius: 50%;
-}
 
 /* -------------------------------------------------------------------------
    Small-caps label — shared by footer counts, diff count, table headers,
-   help section titles, and error trigger
+   and error trigger
 ------------------------------------------------------------------------- */
 .footer-label,
 .header-count,
 .footer-errors,
-.help-section-title,
 #modal-mapping-table th {
   font-size: 10px;
   font-weight: 700;
@@ -302,15 +293,6 @@ input.panel-label:hover { outline: none; border-color: #d0d3da; }
   gap: 0.15rem;
 }
 
-.raw-input {
-  width: 100%;
-  height: 160px;
-  resize: vertical;
-  padding: 0.35rem;
-  line-height: 1.4;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.12);
-}
-
 
 .parsed-output-wrapper { position: relative; }
 
@@ -502,27 +484,6 @@ input.panel-label:hover { outline: none; border-color: #d0d3da; }
 .modal-footer .btn-modal-primary          { background: #2a5; border-color: #1a4; color: #fff; font-weight: 700; }
 .modal-footer .btn-modal-primary:hover    { background: #1a4; }
 
-/* -------------------------------------------------------------------------
-   Help modal content
-------------------------------------------------------------------------- */
-.help-body {
-  min-width: 360px;
-  max-width: 480px;
-}
-
-/* help-section-title font/case styles come from the shared small-caps rule above */
-.help-section-title { margin-bottom: 0.4rem; }
-
-.help-divider {
-  border: none;
-  border-top: 1px solid #ddd;
-  margin: 0.75rem 0;
-}
-
-.help-dl dt,
-.help-dl dd { font-size: 12px; }
-.help-dl dt  { font-weight: 700; margin-top: 0.4rem; }
-.help-dl dd  { color: #444; margin-left: 1rem; line-height: 1.4; }
 
 /* -------------------------------------------------------------------------
    Panel source type dropdown
@@ -580,29 +541,47 @@ input.panel-label:hover { outline: none; border-color: #d0d3da; }
 }
 
 /* -------------------------------------------------------------------------
-   Text input area (only shown when source type is Textbox)
+   Full-viewport drag-and-drop overlay ring
 ------------------------------------------------------------------------- */
-.text-input-area {
+#drop-overlay {
+  position: fixed;
+  inset: 6px;
+  border: 2px dashed #2a8;
+  border-radius: 8px;
+  pointer-events: none; /* clicks fall through to the page underneath */
+  z-index: 999;
+}
+#drop-overlay[hidden] { display: none; }
+
+/* -------------------------------------------------------------------------
+   Landing drop zone — shown in #comparison-body when no files are loaded
+------------------------------------------------------------------------- */
+.drop-zone-landing {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-}
-
-.identifier-row {
-  display: flex;
   align-items: center;
-  gap: 0.4rem;
+  justify-content: center;
+  gap: 0.6rem;
+  min-height: 220px;
+  border: 2px dashed #ccc;
+  border-radius: 6px;
+  background: #fafafa;
+  cursor: default;
+  user-select: none;
 }
 
-.identifier-label {
-  font-size: 11px;
-  color: #777;
-  white-space: nowrap;
+.btn-browse-landing {
+  font-size: 13px;
+  padding: 0.35rem 1.1rem;
+  background: #fff;
+}
+.btn-browse-landing:hover {
+  background: #ebebeb;
+  border-color: #888;
 }
 
-.panel-interpret-as {
-  font-size: 11px;
-  padding: 1px 3px;
+.drop-zone-landing .drop-zone-label {
+  font-size: 12px;
 }
 
 /* -------------------------------------------------------------------------
@@ -711,14 +690,6 @@ input.panel-label:hover { outline: none; border-color: #d0d3da; }
   margin-bottom: 0.4rem;
 }
 
-#comparison-title {
-  font-weight: 700;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #444;
-}
-
 #comparison-count {
   font-size: 12px;
   color: #888;
@@ -772,6 +743,56 @@ input.panel-label:hover { outline: none; border-color: #d0d3da; }
   top: 0;
 }
 
+/* Panel column header: editable label + remove button + filename */
+.col-panel-header {
+  vertical-align: top;
+}
+
+.col-label-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.btn-remove-col {
+  flex-shrink: 0;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 3px;
+  border: none;
+  background: none;
+}
+
+input.col-label-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: normal;
+  color: #333;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  padding: 1px 3px;
+}
+input.col-label-input:hover { border-color: #d0d3da; }
+input.col-label-input:focus { outline: none; border-color: #555; background: #fff; }
+
+.col-filename {
+  display: block;
+  font-size: 10px;
+  font-weight: normal;
+  text-transform: none;
+  letter-spacing: normal;
+  color: #aaa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 3px;
+  margin-top: 1px;
+}
+
 /* IPN key column */
 .col-key {
   white-space: nowrap;
@@ -814,6 +835,15 @@ input.panel-label:hover { outline: none; border-color: #d0d3da; }
 
 .cell-present {
   color: #333;
+}
+
+/* "+" add-file button: pushed to the far right of the comparison header */
+#btn-add-file {
+  margin-left: auto;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 5px;
+  border-style: dashed;
 }
 
 /* Expand all / Collapse all buttons in comparison header */

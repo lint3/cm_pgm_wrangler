@@ -10,7 +10,6 @@
 <body>
   <header>
     <h1>Program Wrangler</h1>
-    <button id="btn-help" class="btn-help-trigger">?</button>
   </header>
 
   <!-- Config bar: spans all columns -->
@@ -27,14 +26,6 @@
 
 
 
-  </div>
-
-  <!-- Panel columns + add-panel button -->
-  <div id="panel-area">
-    <div id="panel-container">
-      <!-- Panels rendered by app.js -->
-    </div>
-    <button id="btn-add-panel">+</button>
   </div>
 
   <!-- Column-mapping modal — shown after a BOM file is selected -->
@@ -81,64 +72,21 @@
     </div>
   </div>
 
-  <!-- Help modal -->
-  <div id="help-modal" class="modal-overlay" hidden>
-    <div class="modal-box">
-      <div class="modal-header">
-        <span>Help</span>
-        <button id="btn-help-close" class="btn-modal-icon">×</button>
-      </div>
-      <div class="modal-body help-body">
-        <p class="help-section-title">Features</p>
-        <dl class="help-dl">
-          <dt>Ranges</dt>
-          <dd>Input ranges like R1-R8 are expanded automatically. Enable the Range toggle to collapse output back to range notation.</dd>
-
-          <dt>Partial matches</dt>
-          <dd>An item in the output area may not be fully represented in the input area (e.g. a refdes is in input but has siblings of the same IPN that were not mentioned). Enable Partial to flag these.</dd>
-
-          <dt>Output delimiter</dt>
-          <dd>Customize the separator between output items (use \n for line break, \t for tab).</dd>
-
-          <dt>Diff highlighting</dt>
-          <dd>Colors tints items by how many panels contain them (red = unique, yellow = partial match). DiffOnly hides items present in all panels.</dd>
-
-          <dt>BOM import</dt>
-          <dd>Load an .xlsx file and map its columns; converting between data types is enabled once a BOM is loaded.</dd>
-        </dl>
-        <hr class="help-divider">
-        <p class="help-section-title">Use Cases</p>
-        <dl class="help-dl">
-          <dt>Deduplicate / normalize a list</dt>
-          <dd>Paste a messy list → get sorted, deduped output.</dd>
-
-          <dt>Convert an IPN list to find numbers</dt>
-          <dd>Import BOM → paste IPN list → set IPN input → FN output.</dd>
-
-          <dt>Compare refdes list to find number list</dt>
-          <dd>E.g. X-Ray requirements (assembly drawing) vs. X-Ray program: Import BOM → paste refdes in one panel + FN list in another → set input/output types → compare.</dd>
-
-          <dt>Compare machine programs to work instructions</dt>
-          <dd>Paste each list in its own panel → set types → diff highlights mismatches.</dd>
-        </dl>
-
-        
-      </div>
-    </div>
-  </div>
-
   <!-- Comparison section — always visible, below panel area -->
   <div id="comparison-section">
     <div id="comparison-header">
-      <span id="comparison-title">Comparison</span>
       <span id="comparison-count"></span>
       <button id="btn-expand-all"  class="btn-fade btn-comparison-ctrl" hidden>Expand all</button>
       <button id="btn-collapse-all" class="btn-fade btn-comparison-ctrl" hidden>Collapse all</button>
+      <input type="file" id="file-input-add" accept=".xlsx,.iss,.mmd" hidden>
+      <button id="btn-add-file" class="btn-fade" title="Add a file to compare">+</button>
     </div>
     <div id="comparison-body">
-      <p class="comparison-empty">Load data into at least two panels to compare.</p>
     </div>
   </div>
+
+  <!-- Full-viewport drag-and-drop overlay ring — shown while a file is dragged over the page -->
+  <div id="drop-overlay" hidden></div>
 
   <script src="lib/xlsx.full.min.js"></script>
   <script src="parser.js"></script>
