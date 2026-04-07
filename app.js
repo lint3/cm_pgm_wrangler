@@ -843,6 +843,16 @@ function buildBomRows(rawRows, mapping) {
 function loadState() {}
 
 function clearState() {
+  // Reset to two empty panels
+  panels.length = 0;
+  panels.push(
+    { id: 'a', label: 'Panel A', sourceType: 'file', bomRows: [], parseErrors: [] },
+    { id: 'b', label: 'Panel B', sourceType: 'file', bomRows: [], parseErrors: [] },
+  );
+
+  // Reset config
+  config.viewMode = 'all';
+
   syncConfigBarUI();
   runComparison();
 }

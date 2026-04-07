@@ -95,50 +95,6 @@ function naturalSort(a, b) {
 }
 
 // --------------------------------------------------------------------------
-// collapseToRanges(tokens, statusOf)
-// Collapses a sorted refdes array into range notation where possible.
-//
-// tokens:   sorted array of refdes strings (output of parseRefdesList)
-// statusOf: function(token) → status class string (e.g. 'status-unique')
-//           Pass () => '' to ignore status and collapse purely by sequence.
-//
-// A run can only extend while: same prefix, consecutive number, same status.
-// Returns an array of { display, statusClass } objects.
-//   display:     e.g. "R1-R5" or "R3"
-//   statusClass: the status of every token in this run (they're all the same)
-// --------------------------------------------------------------------------
-function collapseToRanges(tokens, statusOf) {
-  const groups = [];
-  let i = 0;
-
-  while (i < tokens.length) {
-    const { prefix, num } = splitRefdes(tokens[i]);
-    const status = statusOf(tokens[i]);
-
-    // Extend the run as long as prefix, consecutive number, and status match
-    let j = i + 1;
-    while (j < tokens.length) {
-      const { prefix: p2, num: n2 } = splitRefdes(tokens[j]);
-      if (p2 === prefix && n2 === num + (j - i) && statusOf(tokens[j]) === status) {
-        j++;
-      } else {
-        break;
-      }
-    }
-
-    const runLength = j - i;
-    const display = runLength > 1
-      ? `${prefix}${num}-${prefix}${num + runLength - 1}`
-      : tokens[i];
-
-    groups.push({ display, statusClass: status });
-    i = j;
-  }
-
-  return groups;
-}
-
-// --------------------------------------------------------------------------
 // parseRefdesList(rawText, errorsOut?) — public entry point
 //
 // errorsOut: optional array; unrecognised tokens are pushed into it as raw
@@ -159,5 +115,5 @@ function parseRefdesList(rawText, errorsOut) {
 // Node.js compatibility — allows require('./parser') outside the browser
 // --------------------------------------------------------------------------
 if (typeof module !== 'undefined') {
-  module.exports = { parseRefdesList, splitRefdes, collapseToRanges };
+  module.exports = { parseRefdesList, splitRefdes };
 }
