@@ -435,7 +435,7 @@ function renderComparison(compRows, panels) {
       : ipnEsc;
 
     html += `<tr class="ipn-row row-${row.ipnStatus}" data-ipn="${ipnEsc}">`;
-    html += `<td class="col-key"><button class="btn-expand">${btnArrow}</button> ${ipnDisplay}</td>`;
+    html += `<td class="col-key"><button class="btn-expand">${btnArrow}</button> ${ipnDisplay} <button class="btn-copy-ipn" data-copy-ipn="${ipnEsc}">copy</button></td>`;
     html += panelCells;
     html += `</tr>`;
 
@@ -485,6 +485,24 @@ function renderComparison(compRows, panels) {
       const isOpen  = subRows.length > 0 && !subRows[0].hasAttribute('hidden');
       subRows.forEach(r => r.toggleAttribute('hidden', isOpen));
       btn.textContent = isOpen ? '▶' : '▼';
+    });
+  });
+
+  // Wire IPN copy-to-clipboard buttons
+  table.querySelectorAll('.btn-copy-ipn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const text = btn.dataset.copyIpn;
+      navigator.clipboard.writeText(text).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      });
     });
   });
 
