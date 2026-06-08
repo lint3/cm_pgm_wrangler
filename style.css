@@ -572,7 +572,7 @@ input.col-label-input:focus { outline: none; border-color: #555; background: #ff
   color: #333;
 }
 
-/* Copy-IPN button: small, faint, inline */
+/* Copy-IPN button: small, faint, inline; hidden until row hover */
 .btn-copy-ipn {
   background: none;
   border: 1px solid #ccc;
@@ -582,6 +582,11 @@ input.col-label-input:focus { outline: none; border-color: #555; background: #ff
   color: #aaa;
   line-height: 1.2;
   vertical-align: middle;
+  opacity: 0;
+  transition: opacity 200ms;
+}
+.ipn-row:hover .btn-copy-ipn {
+  opacity: 1;
 }
 .btn-copy-ipn:hover {
   color: #555;
