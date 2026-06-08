@@ -435,7 +435,7 @@ function renderComparison(compRows, panels) {
       : ipnEsc;
 
     html += `<tr class="ipn-row row-${row.ipnStatus}" data-ipn="${ipnEsc}">`;
-    html += `<td class="col-key"><button class="btn-expand">${btnArrow}</button> ${ipnDisplay} <button class="btn-copy-ipn" data-copy-ipn="${ipnEsc}">copy</button></td>`;
+    html += `<td class="col-key"><button class="btn-expand">${btnArrow}</button> ${ipnDisplay} <button class="btn-copy-ipn" data-copy-ipn="${ipnEsc}">c</button></td>`;
     html += panelCells;
     html += `</tr>`;
 

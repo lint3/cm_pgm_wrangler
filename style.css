@@ -416,7 +416,7 @@ header h1 { font-size: 1.1rem; }
   align-items: center;
   gap: 0.3rem;
   font-size: 13px;
-  cursor: pointer;
+  cursor: default;
   user-select: none;
 }
 
@@ -575,17 +575,17 @@ input.col-label-input:focus { outline: none; border-color: #555; background: #ff
 /* Copy-IPN button: small, faint, inline */
 .btn-copy-ipn {
   background: none;
-  border: none;
-  padding: 0 0.2rem;
-  cursor: pointer;
+  border: 1px solid #ccc;
+  padding: 0 3px;
+  cursor: default;
   font-size: 10px;
   color: #aaa;
-  line-height: 1;
+  line-height: 1.2;
   vertical-align: middle;
 }
 .btn-copy-ipn:hover {
-  color: #333;
-  text-decoration: underline;
+  color: #555;
+  border-color: #999;
 }
 
 /* "Rows with differences" — hide match rows when .view-diff-rows is on the table */
